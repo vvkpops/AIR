@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Airport Weather Monitor</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f4f4; text-align: center; padding: 20px; }
+    h1 { font-size: 28px; margin-bottom: 20px; }
+    #airportForm input, #airportForm button {
+      font-size: 18px; padding: 6px 10px; margin: 5px;
+    }
+    .airport-box {
+      display: inline-block;
+      background: white;
+      margin: 10px;
+      padding: 15px;
+      border-radius: 10px;
+      border: 3px solid black;
+      font-size: 16px;
+      font-weight: bold;
+      min-width: 200px;
+      text-align: left;
+    }
+    .VFR { border-color: green; color: green; }
+    .MVFR { border-color: blue; color: blue; }
+    .IFR { border-color: red; color: red; }
+    .LIFR { border-color: hotpink; color: hotpink; }
+  </style>
+</head>
+<body>
+  <h1>Airport Weather Monitor (METAR + TAF Times)</h1>
+  <form id="airportForm">
+    <input type="text" id="icaoInput" placeholder="Enter ICAO Code (e.g. CYYZ)" required>
+    <button type="submit">Add Airport</button>
+  </form>
+  <div id="airportGrid"></div>
+
+  <script>
+    const form = document.getElementById("airportForm");
+    const input = document.getElementById("icaoInput");
+    const grid = document.getElementById("airportGrid");
+    let airports = JSON.parse(localStorage.getItem("airports")) || [];
+
+    function saveAirports() {
+      localStorage.setItem("airports", JSON.stringify(airports));
+    }
+
+    function fetchWeather() {
+      if (airports.length === 0) return;
+      fetch('/weather', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ airports })
+      })
+      .then(res => res.json())
+      .then(data => {
+        grid.innerHTML = "";
+        for (let code in data) {
+          const item = data[code];
+          const div = document.createElement("div");
+          div.className = "airport-box " + item.category;
+          div.innerHTML = `
+            <strong>${code}</strong><br>
+            ${item.category}<br><br>
+            <div style="font-size:14px; color:#333">
+              METAR: ${item.metar}<br>
+              METAR Time: ${item.metar_time}Z<br>
+              Next METAR: ${item.next_metar}Z<br>
+              TAF Time: ${item.taf_time}Z<br>
+              Next TAF: ${item.next_taf}Z
+            </div>`;
+          grid.appendChild(div);
+        }
+      })
+      .catch(err => console.error("Fetch error", err));
+    }
+
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const code = input.value.trim().toUpperCase();
+      if (code && !airports.includes(code)) {
+        airports.push(code);
+        saveAirports();
+        input.value = "";
+        fetchWeather();
+      }
+    };
+
+    fetchWeather(); // fetch on page load
+    setInterval(fetchWeather, 60000); // update every 60 seconds
+  </script>
+</body>
+</html>

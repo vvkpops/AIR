@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: airport-weather-ui
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
+    plan: free
+
+  - type: worker
+    name: airport-weather-scheduler
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python scheduler.py"
+    plan: free
