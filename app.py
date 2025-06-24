@@ -34,5 +34,6 @@ def weather():
     return jsonify(response)
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
     print("Using JSON file at:", DATA_FILE)
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True)
