@@ -22,8 +22,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid ICAO code' });
   }
 
-  const CLIENT_ID = process.env.FAA_CLIENT_ID;
-  const CLIENT_SECRET = process.env.FAA_CLIENT_SECRET;
+  const CLIENT_ID = process.env.REACT_APP_FAA_CLIENT_ID;
+  const CLIENT_SECRET = process.env.REACT_APP_FAA_API_KEY;
 
   if (!CLIENT_ID || !CLIENT_SECRET) {
     console.error('Missing FAA API credentials');
