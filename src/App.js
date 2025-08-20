@@ -137,6 +137,368 @@ const Header = () => {
   );
 };
 
+// NOTAM parsing utilities
+const parseNotamText = (notamText) => {
+  if (!notamText) return null;
+  
+  const lines = notamText.split('\n').map(line => line.trim()).filter(line => line);
+  if (lines.length === 0) return null;
+  
+  // Extract NOTAM components
+  const notamObj = {
+    id: '',
+    qLine: '',
+    aLine: '',
+    bLine: '',
+    cLine: '',
+    dLine: '',
+    eLine: '',
+    fLine: '',
+    gLine: '',
+    rawText: notamText,
+    classification: '',
+    traffic: '',
+    purpose: '',
+    scope: '',
+    lowerLimit: '',
+    upperLimit: '',
+    coordinates: '',
+    validFrom: '',
+    validTo: '',
+    schedule: '',
+    description: '',
+    isTemporary: false,
+    isPermanent: false
+  };
+  
+  // Parse each line
+  lines.forEach(line => {
+    const upperLine = line.toUpperCase();
+    
+    // Extract NOTAM ID from first line
+    if (!notamObj.id && line.match(/^\w+\s+NOTAM/i)) {
+      const idMatch = line.match(/^(\w+)/);
+      if (idMatch) notamObj.id = idMatch[1];
+    }
+    
+    // Q Line - Qualifier Line (most important)
+    if (upperLine.startsWith('Q)')) {
+      notamObj.qLine = line;
+      
+      // Parse Q line components: Q)ICAO/QCODE/TRAFFIC/PURPOSE/SCOPE/LOWER/UPPER/COORDINATES/RADIUS
+      const qParts = line.substring(2).split('/');
+      if (qParts.length >= 8) {
+        notamObj.classification = qParts[1] || '';
+        notamObj.traffic = qParts[2] || '';
+        notamObj.purpose = qParts[3] || '';
+        notamObj.scope = qParts[4] || '';
+        notamObj.lowerLimit = qParts[5] || '';
+        notamObj.upperLimit = qParts[6] || '';
+        notamObj.coordinates = qParts[7] || '';
+      }
+    }
+    
+    // A Line - Location
+    else if (upperLine.startsWith('A)')) {
+      notamObj.aLine = line.substring(2).trim();
+    }
+    
+    // B Line - Valid From
+    else if (upperLine.startsWith('B)')) {
+      notamObj.bLine = line.substring(2).trim();
+      notamObj.validFrom = parseNotamDateTime(notamObj.bLine);
+    }
+    
+    // C Line - Valid To
+    else if (upperLine.startsWith('C)')) {
+      notamObj.cLine = line.substring(2).trim();
+      notamObj.validTo = parseNotamDateTime(notamObj.cLine);
+      notamObj.isPermanent = notamObj.cLine.includes('PERM');
+    }
+    
+    // D Line - Schedule
+    else if (upperLine.startsWith('D)')) {
+      notamObj.dLine = line.substring(2).trim();
+      notamObj.schedule = notamObj.dLine;
+    }
+    
+    // E Line - Description (most important for users)
+    else if (upperLine.startsWith('E)')) {
+      notamObj.eLine = line.substring(2).trim();
+      notamObj.description = notamObj.eLine;
+    }
+    
+    // F Line - Lower Limit
+    else if (upperLine.startsWith('F)')) {
+      notamObj.fLine = line.substring(2).trim();
+    }
+    
+    // G Line - Upper Limit
+    else if (upperLine.startsWith('G)')) {
+      notamObj.gLine = line.substring(2).trim();
+    }
+  });
+  
+  // Determine if temporary
+  notamObj.isTemporary = !notamObj.isPermanent && (notamObj.validTo || notamObj.schedule);
+  
+  return notamObj;
+};
+
+const parseNotamDateTime = (dateTimeStr) => {
+  if (!dateTimeStr || dateTimeStr.includes('PERM')) return null;
+  
+  // NOTAM date format is typically YYMMDDHHMM
+  const match = dateTimeStr.match(/(\d{10})/);
+  if (match) {
+    const dt = match[1];
+    const year = 2000 + parseInt(dt.substring(0, 2));
+    const month = parseInt(dt.substring(2, 4)) - 1; // JS months are 0-indexed
+    const day = parseInt(dt.substring(4, 6));
+    const hour = parseInt(dt.substring(6, 8));
+    const minute = parseInt(dt.substring(8, 10));
+    
+    return new Date(year, month, day, hour, minute);
+  }
+  
+  return null;
+};
+
+const getNotamTypeDescription = (qCode) => {
+  if (!qCode) return 'General';
+  
+  const typeMap = {
+    'QXXXX': 'General',
+    'QRXXX': 'Runway',
+    'QTXXX': 'Taxiway',
+    'QAXXX': 'Apron',
+    'QLXXX': 'Lighting',
+    'QNXXX': 'Navigation',
+    'QFXXX': 'Facilities',
+    'QOXXX': 'Obstacles',
+    'QPXXX': 'Personnel',
+    'QSXXX': 'Services',
+    'QWXXX': 'Warning',
+    'QMXXX': 'Misc',
+    'QCXXX': 'Communications',
+    'QIXXX': 'Instrument Procedures',
+    'QRWXX': 'Runway Closure',
+    'QRWCH': 'Runway Closed',
+    'QTACH': 'Taxiway Closed',
+    'QOBST': 'Obstacle',
+    'QNACS': 'Navigation Aid Closed',
+    'QFALC': 'Approach Light Closed',
+    'QFAPZ': 'Airport Closed'
+  };
+  
+  // Check for exact matches first
+  if (typeMap[qCode]) return typeMap[qCode];
+  
+  // Check for partial matches
+  for (const [code, desc] of Object.entries(typeMap)) {
+    if (qCode.startsWith(code.substring(0, 2))) {
+      return desc;
+    }
+  }
+  
+  return 'General';
+};
+
+// Enhanced NOTAM Modal Component
+const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 px-4">
+      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden border border-gray-600">
+        {/* Header */}
+        <div className="flex justify-between items-center border-b border-gray-700 p-4 bg-gray-900">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold text-sm">📋</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-cyan-400">NOTAMs for {icao}</h3>
+              <p className="text-gray-400 text-sm">Notice to Airmen - Current Active NOTAMs</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-3xl focus:outline-none hover:bg-gray-700 rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+            title="Close NOTAMs"
+          >
+            ×
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[calc(95vh-8rem)] bg-gray-850">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block w-10 h-10 border-4 border-t-orange-500 border-gray-600 rounded-full animate-spin"></div>
+              <p className="mt-4 text-orange-400 font-semibold">Fetching NOTAMs from FAA...</p>
+              <p className="text-gray-400 text-sm mt-1">Please wait while we retrieve current NOTAMs</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-white text-2xl">⚠️</span>
+              </div>
+              <p className="text-red-400 font-semibold mb-2">Error Loading NOTAMs</p>
+              <p className="text-gray-400 text-sm">{error}</p>
+            </div>
+          ) : notamData && notamData.length > 0 ? (
+            <div className="space-y-6">
+              <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                <div className="flex items-center justify-between">
+                  <span className="text-cyan-400 font-semibold">Total NOTAMs Found: {notamData.length}</span>
+                  <span className="text-gray-400 text-sm">Source: FAA NOTAM System</span>
+                </div>
+              </div>
+              
+              {notamData.map((notam, index) => {
+                const typeDesc = getNotamTypeDescription(notam.classification);
+                const isActive = notam.validFrom && notam.validTo ? 
+                  (new Date() >= notam.validFrom && new Date() <= notam.validTo) : true;
+                
+                return (
+                  <div key={index} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden">
+                    {/* NOTAM Header */}
+                    <div className="bg-gray-800 px-4 py-3 border-b border-gray-600">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                          <span className="text-orange-400 font-bold text-lg">
+                            {notam.id || `NOTAM ${index + 1}`}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${
+                            typeDesc === 'Runway' ? 'bg-red-600 text-white' :
+                            typeDesc === 'Taxiway' ? 'bg-yellow-600 text-white' :
+                            typeDesc === 'Navigation' ? 'bg-blue-600 text-white' :
+                            typeDesc === 'Obstacles' ? 'bg-purple-600 text-white' :
+                            'bg-gray-600 text-white'
+                          }`}>
+                            {typeDesc}
+                          </span>
+                          {isActive && (
+                            <span className="px-2 py-1 bg-green-600 text-white text-xs rounded font-bold">
+                              ACTIVE
+                            </span>
+                          )}
+                          {notam.isPermanent && (
+                            <span className="px-2 py-1 bg-orange-600 text-white text-xs rounded font-bold">
+                              PERMANENT
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right text-gray-400 text-sm">
+                          {notam.aLine && <div>Location: {notam.aLine}</div>}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* NOTAM Body */}
+                    <div className="p-4 space-y-4">
+                      {/* Main Description */}
+                      {notam.description && (
+                        <div>
+                          <h5 className="text-cyan-400 font-semibold mb-2">📝 Description</h5>
+                          <div className="bg-gray-800 p-3 rounded border-l-4 border-orange-500">
+                            <p className="text-gray-100 leading-relaxed">{notam.description}</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Validity Period */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(notam.validFrom || notam.bLine) && (
+                          <div>
+                            <h6 className="text-green-400 font-semibold mb-1">⏰ Effective From</h6>
+                            <p className="text-gray-200 bg-gray-800 p-2 rounded">
+                              {notam.validFrom ? notam.validFrom.toLocaleString() : notam.bLine}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {(notam.validTo || notam.cLine) && (
+                          <div>
+                            <h6 className="text-red-400 font-semibold mb-1">⏰ Valid Until</h6>
+                            <p className="text-gray-200 bg-gray-800 p-2 rounded">
+                              {notam.isPermanent ? 'PERMANENT' : 
+                               notam.validTo ? notam.validTo.toLocaleString() : notam.cLine}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Schedule */}
+                      {notam.schedule && (
+                        <div>
+                          <h6 className="text-blue-400 font-semibold mb-1">📅 Schedule</h6>
+                          <p className="text-gray-200 bg-gray-800 p-2 rounded">{notam.schedule}</p>
+                        </div>
+                      )}
+                      
+                      {/* Technical Details */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
+                        {notam.lowerLimit && (
+                          <div>
+                            <span className="text-gray-400 font-semibold">Lower Limit:</span>
+                            <p className="text-gray-200">{notam.lowerLimit}</p>
+                          </div>
+                        )}
+                        {notam.upperLimit && (
+                          <div>
+                            <span className="text-gray-400 font-semibold">Upper Limit:</span>
+                            <p className="text-gray-200">{notam.upperLimit}</p>
+                          </div>
+                        )}
+                        {notam.coordinates && (
+                          <div>
+                            <span className="text-gray-400 font-semibold">Coordinates:</span>
+                            <p className="text-gray-200 font-mono">{notam.coordinates}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Raw NOTAM Text (Collapsible) */}
+                      <details className="mt-4">
+                        <summary className="cursor-pointer text-gray-400 hover:text-gray-200 font-semibold">
+                          🔍 View Raw NOTAM Text
+                        </summary>
+                        <div className="mt-2 bg-black p-3 rounded border border-gray-700">
+                          <pre className="text-green-300 text-xs font-mono whitespace-pre-wrap overflow-x-auto">
+                            {notam.rawText}
+                          </pre>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-gray-400 text-2xl">📋</span>
+              </div>
+              <p className="text-gray-400 text-lg font-semibold mb-2">No NOTAMs Found</p>
+              <p className="text-gray-500">No active NOTAMs are currently published for {icao}</p>
+            </div>
+          )}
+        </div>
+        
+        {/* Footer */}
+        <div className="border-t border-gray-700 p-4 bg-gray-900 text-center">
+          <p className="text-gray-400 text-sm">
+            NOTAMs are retrieved from the FAA NOTAM Search System • 
+            <span className="text-orange-400"> Always verify with official sources before flight</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Weather Tile Component
 const WeatherTile = ({ 
   icao, 
@@ -150,6 +512,10 @@ const WeatherTile = ({
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
   const [loading, setLoading] = useState(true);
+  const [notamModalOpen, setNotamModalOpen] = useState(false);
+  const [notamData, setNotamData] = useState([]);
+  const [notamLoading, setNotamLoading] = useState(false);
+  const [notamError, setNotamError] = useState(null);
 
   const storageKey = `weatherTileMin_${icao}`;
   const [minimized, setMinimized] = useState(() => {
@@ -198,6 +564,61 @@ const WeatherTile = ({
   }, [minimized, storageKey]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
+
+  const fetchNotamData = async () => {
+    setNotamLoading(true);
+    setNotamError(null);
+    
+    try {
+      // Use FAA NOTAM Search API
+      const response = await fetch(`https://external-api.faa.gov/notamapi/v1/notams?domesticLocation=${icao}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`FAA API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Parse the NOTAM data
+      const parsedNotams = [];
+      
+      if (data && data.items && Array.isArray(data.items)) {
+        data.items.forEach(item => {
+          if (item.notamText) {
+            const parsed = parseNotamText(item.notamText);
+            if (parsed) {
+              parsedNotams.push(parsed);
+            }
+          }
+        });
+      }
+      
+      setNotamData(parsedNotams);
+      
+    } catch (error) {
+      console.error(`Error fetching NOTAMs for ${icao}:`, error);
+      setNotamError(error.message);
+      setNotamData([]);
+    } finally {
+      setNotamLoading(false);
+    }
+  };
+
+  const handleNotamClick = () => {
+    setNotamModalOpen(true);
+    fetchNotamData();
+  };
+
+  const handleCloseNotamModal = () => {
+    setNotamModalOpen(false);
+    setNotamData([]);
+    setNotamError(null);
+  };
 
   const getBorderClass = () => {
     if (loading) return "border-gray-700";
@@ -286,6 +707,17 @@ const WeatherTile = ({
         }
       </div>
 
+      {/* NOTAM Button */}
+      <div className="mt-2 text-center">
+        <button
+          onClick={handleNotamClick}
+          className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm font-semibold transition-colors"
+          title={`View NOTAMs for ${icao}`}
+        >
+          📋 NOTAMs
+        </button>
+      </div>
+
       {/* Weather content */}
       {effectiveMinimized ? (
         <div className="mt-2 text-sm text-gray-300 flex items-center justify-center">
@@ -317,6 +749,16 @@ const WeatherTile = ({
           )}
         </>
       )}
+      
+      {/* NOTAM Modal */}
+      <NotamModal 
+        icao={icao}
+        isOpen={notamModalOpen}
+        onClose={handleCloseNotamModal}
+        notamData={notamData}
+        loading={notamLoading}
+        error={notamError}
+      />
     </div>
   );
 };
