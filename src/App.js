@@ -570,8 +570,11 @@ const WeatherTile = ({
     setNotamError(null);
     
     try {
-      // Use FAA NOTAM Search API
-      const response = await fetch(`https://external-api.faa.gov/notamapi/v1/notams?domesticLocation=${icao}`, {
+      // Use CORS proxy to access FAA API
+      const corsProxy = "https://corsproxy.io/?";
+      const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?domesticLocation=${icao}`;
+      
+      const response = await fetch(`${corsProxy}${encodeURIComponent(faaUrl)}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -596,13 +599,32 @@ const WeatherTile = ({
             }
           }
         });
+      } else if (data && data.notamList && Array.isArray(data.notamList)) {
+        // Alternative data structure
+        data.notamList.forEach(item => {
+          if (item.traditionalNotamText || item.notamText) {
+            const parsed = parseNotamText(item.traditionalNotamText || item.notamText);
+            if (parsed) {
+              parsedNotams.push(parsed);
+            }
+          }
+        });
+      } else if (typeof data === 'string') {
+        // If raw NOTAM text is returned
+        const notamBlocks = data.split(/\n\s*\n/).filter(block => block.trim());
+        notamBlocks.forEach(block => {
+          const parsed = parseNotamText(block);
+          if (parsed) {
+            parsedNotams.push(parsed);
+          }
+        });
       }
       
       setNotamData(parsedNotams);
       
     } catch (error) {
       console.error(`Error fetching NOTAMs for ${icao}:`, error);
-      setNotamError(error.message);
+      setNotamError(`Unable to fetch NOTAMs: ${error.message}`);
       setNotamData([]);
     } finally {
       setNotamLoading(false);
