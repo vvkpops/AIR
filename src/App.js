@@ -101,42 +101,6 @@ function highlightTAFAllBelow(raw, minC, minV) {
   }).join("");
 }
 
-// Header Component
-const Header = () => {
-  const [localTime, setLocalTime] = useState('');
-  const [utcTime, setUtcTime] = useState('');
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setLocalTime(now.toLocaleTimeString() + ' Local');
-      setUtcTime(now.toUTCString().slice(17, 25) + ' UTC');
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <header className="p-4 mb-6 max-w-screen-2xl mx-auto">
-      <div className="text-center">
-        <div className="text-2xl sm:text-3xl font-bold text-cyan-300">
-          Weather Monitor Dashboard
-        </div>
-        <div className="mt-2 w-full flex flex-col sm:flex-row items-center text-base sm:text-lg font-mono text-gray-200 font-semibold">
-          <span className="w-full sm:w-1/2 text-center sm:text-left">
-            <span className="inline-block text-lg sm:text-xl font-bold">{localTime}</span>
-          </span>
-          <span className="w-full sm:w-1/2 text-center sm:text-right">
-            <span className="inline-block text-lg sm:text-xl font-bold text-cyan-400">{utcTime}</span>
-          </span>
-        </div>
-      </div>
-    </header>
-  );
-};
-
 // NOTAM parsing utilities
 const parseNotamText = (notamText) => {
   if (!notamText) return null;
@@ -302,6 +266,42 @@ const getNotamTypeDescription = (qCode) => {
   }
   
   return 'General';
+};
+
+// Header Component
+const Header = () => {
+  const [localTime, setLocalTime] = useState('');
+  const [utcTime, setUtcTime] = useState('');
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setLocalTime(now.toLocaleTimeString() + ' Local');
+      setUtcTime(now.toUTCString().slice(17, 25) + ' UTC');
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <header className="p-4 mb-6 max-w-screen-2xl mx-auto">
+      <div className="text-center">
+        <div className="text-2xl sm:text-3xl font-bold text-cyan-300">
+          Weather Monitor Dashboard
+        </div>
+        <div className="mt-2 w-full flex flex-col sm:flex-row items-center text-base sm:text-lg font-mono text-gray-200 font-semibold">
+          <span className="w-full sm:w-1/2 text-center sm:text-left">
+            <span className="inline-block text-lg sm:text-xl font-bold">{localTime}</span>
+          </span>
+          <span className="w-full sm:w-1/2 text-center sm:text-right">
+            <span className="inline-block text-lg sm:text-xl font-bold text-cyan-400">{utcTime}</span>
+          </span>
+        </div>
+      </div>
+    </header>
+  );
 };
 
 // Enhanced NOTAM Modal Component
@@ -570,51 +570,94 @@ const WeatherTile = ({
     setNotamError(null);
     
     try {
-      // Use CORS proxy to access FAA API
-      const corsProxy = "https://corsproxy.io/?";
+      // Use FAA API with credentials from environment variables
+      const faaApiKey = process.env.REACT_APP_FAA_API_KEY;
+      const faaClientId = process.env.REACT_APP_FAA_CLIENT_ID;
+      
+      if (!faaApiKey) {
+        throw new Error('FAA API credentials not configured. Please set REACT_APP_FAA_API_KEY in environment variables.');
+      }
+      
+      // FAA NOTAM API endpoint
       const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?domesticLocation=${icao}`;
       
-      const response = await fetch(`${corsProxy}${encodeURIComponent(faaUrl)}`, {
+      const headers = {
+        'Accept': 'application/json',
+        'FAA-API-KEY': faaApiKey,
+      };
+      
+      // Add client ID if provided
+      if (faaClientId) {
+        headers['FAA-CLIENT-ID'] = faaClientId;
+      }
+      
+      const response = await fetch(faaUrl, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
+        headers: headers
       });
       
       if (!response.ok) {
-        throw new Error(`FAA API error: ${response.status} ${response.statusText}`);
+        if (response.status === 401) {
+          throw new Error('Invalid FAA API credentials. Please check your API key.');
+        } else if (response.status === 403) {
+          throw new Error('FAA API access forbidden. Please verify your API permissions.');
+        } else if (response.status === 429) {
+          throw new Error('FAA API rate limit exceeded. Please try again later.');
+        } else {
+          throw new Error(`FAA API error: ${response.status} ${response.statusText}`);
+        }
       }
       
       const data = await response.json();
+      console.log('FAA API Response:', data); // Debug log
       
-      // Parse the NOTAM data
+      // Parse the NOTAM data from FAA API response
       const parsedNotams = [];
       
+      // Handle different FAA API response structures
       if (data && data.items && Array.isArray(data.items)) {
         data.items.forEach(item => {
-          if (item.notamText) {
-            const parsed = parseNotamText(item.notamText);
+          if (item.notamText || item.traditionalNotamText) {
+            const notamText = item.notamText || item.traditionalNotamText;
+            const parsed = parseNotamText(notamText);
             if (parsed) {
+              // Add additional metadata from FAA API
+              parsed.faaId = item.notamNumber || item.id;
+              parsed.lastUpdated = item.lastUpdated;
+              parsed.classification = item.classification || parsed.classification;
+              parsed.source = 'FAA Official API';
               parsedNotams.push(parsed);
             }
           }
         });
       } else if (data && data.notamList && Array.isArray(data.notamList)) {
-        // Alternative data structure
+        // Alternative response structure
         data.notamList.forEach(item => {
           if (item.traditionalNotamText || item.notamText) {
-            const parsed = parseNotamText(item.traditionalNotamText || item.notamText);
+            const notamText = item.traditionalNotamText || item.notamText;
+            const parsed = parseNotamText(notamText);
             if (parsed) {
+              parsed.faaId = item.notamNumber || item.id;
+              parsed.source = 'FAA Official API';
               parsedNotams.push(parsed);
             }
           }
         });
-      } else if (typeof data === 'string') {
-        // If raw NOTAM text is returned
+      } else if (data && data.count !== undefined) {
+        // Handle empty results with count
+        console.log(`FAA API returned ${data.count} NOTAMs for ${icao}`);
+        if (data.count === 0) {
+          // No NOTAMs found - this is normal
+          setNotamData([]);
+          return;
+        }
+      } else if (typeof data === 'string' && data.trim()) {
+        // Handle raw NOTAM text response
         const notamBlocks = data.split(/\n\s*\n/).filter(block => block.trim());
         notamBlocks.forEach(block => {
           const parsed = parseNotamText(block);
           if (parsed) {
+            parsed.source = 'FAA Official API';
             parsedNotams.push(parsed);
           }
         });
@@ -624,7 +667,7 @@ const WeatherTile = ({
       
     } catch (error) {
       console.error(`Error fetching NOTAMs for ${icao}:`, error);
-      setNotamError(`Unable to fetch NOTAMs: ${error.message}`);
+      setNotamError(`${error.message}`);
       setNotamData([]);
     } finally {
       setNotamLoading(false);
