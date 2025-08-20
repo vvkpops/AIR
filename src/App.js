@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import './index.css';
 
 // Weather utilities
 const TAF_CACHE_MS = 600000; // 10 minutes
@@ -304,15 +305,58 @@ const Header = () => {
   );
 };
 
-// Enhanced NOTAM Modal Component
+// Fixed NOTAM Modal Component
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
+  const modalRef = useRef(null);
+
+  // Handle click outside to close
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      // Prevent scrolling when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 px-4">
-      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden border border-gray-600">
-        {/* Header */}
-        <div className="flex justify-between items-center border-b border-gray-700 p-4 bg-gray-900">
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 px-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div 
+        ref={modalRef}
+        className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden border border-gray-600"
+        style={{ position: 'relative', transform: 'none' }}
+      >
+        {/* Header - Fixed */}
+        <div className="flex justify-between items-center border-b border-gray-700 p-4 bg-gray-900" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center">
               <span className="text-white font-bold text-sm">📋</span>
@@ -331,8 +375,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
           </button>
         </div>
         
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(95vh-8rem)] bg-gray-850">
+        {/* Content - Scrollable */}
+        <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(95vh - 8rem)' }}>
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block w-10 h-10 border-4 border-t-orange-500 border-gray-600 rounded-full animate-spin"></div>
@@ -368,7 +412,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-3">
                           <span className="text-orange-400 font-bold text-lg">
-                            {notam.id || `NOTAM ${index + 1}`}
+                            {notam.number || `NOTAM ${index + 1}`}
                           </span>
                           <span className={`px-2 py-1 rounded text-xs font-bold ${
                             typeDesc === 'Runway' ? 'bg-red-600 text-white' :
@@ -487,8 +531,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
           )}
         </div>
         
-        {/* Footer */}
-        <div className="border-t border-gray-700 p-4 bg-gray-900 text-center">
+        {/* Footer - Fixed */}
+        <div className="border-t border-gray-700 p-4 bg-gray-900 text-center" style={{ position: 'sticky', bottom: 0 }}>
           <p className="text-gray-400 text-sm">
             NOTAMs are retrieved from the FAA NOTAM Search System • 
             <span className="text-orange-400"> Always verify with official sources before flight</span>
@@ -499,7 +543,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   );
 };
 
-// Weather Tile Component
+// Weather Tile Component with Backend API Integration
 const WeatherTile = ({ 
   icao, 
   weatherMinima, 
@@ -565,100 +609,78 @@ const WeatherTile = ({
 
   const toggleMinimize = () => setMinimized(prev => !prev);
 
+  // Fixed NOTAM fetch function using backend API
   const fetchNotamData = async () => {
     setNotamLoading(true);
     setNotamError(null);
     
     try {
-      // Use FAA API with credentials from environment variables
-      const faaApiKey = process.env.REACT_APP_FAA_API_KEY;
-      const faaClientId = process.env.REACT_APP_FAA_CLIENT_ID;
-      
-      if (!faaApiKey) {
-        throw new Error('FAA API credentials not configured. Please set REACT_APP_FAA_API_KEY in environment variables.');
-      }
-      
-      // FAA NOTAM API endpoint
-      const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?domesticLocation=${icao}`;
-      
-      const headers = {
-        'Accept': 'application/json',
-        'FAA-API-KEY': faaApiKey,
-      };
-      
-      // Add client ID if provided
-      if (faaClientId) {
-        headers['FAA-CLIENT-ID'] = faaClientId;
-      }
-      
-      const response = await fetch(faaUrl, {
-        method: 'GET',
-        headers: headers
-      });
+      // Use the backend API endpoint instead of direct FAA API call
+      const response = await fetch(`/api/notams?icao=${icao}`);
       
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Invalid FAA API credentials. Please check your API key.');
-        } else if (response.status === 403) {
-          throw new Error('FAA API access forbidden. Please verify your API permissions.');
-        } else if (response.status === 429) {
-          throw new Error('FAA API rate limit exceeded. Please try again later.');
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        } else if (response.status === 400) {
+          throw new Error('Invalid ICAO code provided.');
+        } else if (response.status === 500) {
+          throw new Error('Server error occurred while fetching NOTAMs.');
         } else {
-          throw new Error(`FAA API error: ${response.status} ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
       }
       
       const data = await response.json();
-      console.log('FAA API Response:', data); // Debug log
       
-      // Parse the NOTAM data from FAA API response
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      console.log('Backend API Response:', data); // Debug log
+      
+      // Process the NOTAM data from backend API
       const parsedNotams = [];
       
-      // Handle different FAA API response structures
-      if (data && data.items && Array.isArray(data.items)) {
-        data.items.forEach(item => {
-          if (item.notamText || item.traditionalNotamText) {
-            const notamText = item.notamText || item.traditionalNotamText;
-            const parsed = parseNotamText(notamText);
-            if (parsed) {
-              // Add additional metadata from FAA API
-              parsed.faaId = item.notamNumber || item.id;
-              parsed.lastUpdated = item.lastUpdated;
-              parsed.classification = item.classification || parsed.classification;
-              parsed.source = 'FAA Official API';
-              parsedNotams.push(parsed);
-            }
-          }
-        });
-      } else if (data && data.notamList && Array.isArray(data.notamList)) {
-        // Alternative response structure
-        data.notamList.forEach(item => {
-          if (item.traditionalNotamText || item.notamText) {
-            const notamText = item.traditionalNotamText || item.notamText;
-            const parsed = parseNotamText(notamText);
-            if (parsed) {
-              parsed.faaId = item.notamNumber || item.id;
-              parsed.source = 'FAA Official API';
-              parsedNotams.push(parsed);
-            }
-          }
-        });
-      } else if (data && data.count !== undefined) {
-        // Handle empty results with count
-        console.log(`FAA API returned ${data.count} NOTAMs for ${icao}`);
-        if (data.count === 0) {
-          // No NOTAMs found - this is normal
-          setNotamData([]);
-          return;
-        }
-      } else if (typeof data === 'string' && data.trim()) {
-        // Handle raw NOTAM text response
-        const notamBlocks = data.split(/\n\s*\n/).filter(block => block.trim());
-        notamBlocks.forEach(block => {
-          const parsed = parseNotamText(block);
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          // The backend already processes NOTAMs, so we can use them directly
+          const notamText = item.body || item.summary || '';
+          const parsed = parseNotamText(notamText);
+          
           if (parsed) {
-            parsed.source = 'FAA Official API';
+            // Merge backend data with parsed data
+            parsed.number = item.number || parsed.number;
+            parsed.icao = icao;
+            parsed.classification = item.classification || parsed.classification;
+            parsed.type = item.type || parsed.type;
+            parsed.validFrom = item.validFrom || parsed.validFrom;
+            parsed.validTo = item.validTo || parsed.validTo;
+            parsed.summary = item.summary || parsed.description;
+            parsed.location = item.location || parsed.aLine;
+            parsed.qLine = item.qLine || parsed.qLine;
+            parsed.source = 'Backend API (FAA Official)';
             parsedNotams.push(parsed);
+          } else {
+            // If parsing fails, create a simple NOTAM object from backend data
+            parsedNotams.push({
+              id: item.number || `${icao}-${Date.now()}`,
+              number: item.number || '',
+              icao: icao,
+              classification: item.classification || '',
+              type: item.type || '',
+              validFrom: item.validFrom || '',
+              validTo: item.validTo || '',
+              description: item.summary || item.body || 'No description available',
+              summary: item.summary || item.body || 'No summary available',
+              rawText: item.body || item.summary || '',
+              location: item.location || icao,
+              qLine: item.qLine || '',
+              source: 'Backend API (FAA Official)',
+              aLine: item.location || icao,
+              bLine: item.validFrom || '',
+              cLine: item.validTo || '',
+              isPermanent: item.validTo ? item.validTo.includes('PERM') : false
+            });
           }
         });
       }
@@ -667,7 +689,7 @@ const WeatherTile = ({
       
     } catch (error) {
       console.error(`Error fetching NOTAMs for ${icao}:`, error);
-      setNotamError(`${error.message}`);
+      setNotamError(error.message);
       setNotamData([]);
     } finally {
       setNotamLoading(false);
