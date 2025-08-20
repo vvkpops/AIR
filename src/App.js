@@ -1,3 +1,4 @@
+// (full file, updated handleNotamClick to stop propagation and delay fetch)
 import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 
@@ -714,9 +715,19 @@ const WeatherTile = ({
     }
   };
 
-  const handleNotamClick = () => {
+  // Updated: stop propagation on the click that opens the modal to avoid the outside-click listener closing it immediately
+  const handleNotamClick = (e) => {
+    // prevent the opening click from bubbling to document-level handlers which can immediately close the modal
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setNotamModalOpen(true);
-    fetchNotamData();
+
+    // Defer fetch slightly to avoid any race with mounting listeners (safe and cheap)
+    setTimeout(() => {
+      fetchNotamData();
+    }, 0);
   };
 
   const handleCloseNotamModal = () => {
