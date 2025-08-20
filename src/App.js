@@ -268,10 +268,8 @@ const Header = () => {
 
 // Simple NOTAM Modal using portal, just raw NOTAM stacked
 import ReactDOM from 'react-dom';
-
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
@@ -287,7 +285,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
-
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') onClose();
@@ -295,7 +292,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     if (isOpen) document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   // Main modal content (just raw NOTAMs!)
