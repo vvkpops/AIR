@@ -8,13 +8,12 @@
       "config": {
         "distDir": "build"
       }
+    },
+    {
+      "src": "api/notams.js",
+      "use": "@vercel/node"
     }
   ],
-  "functions": {
-    "api/notams.js": {
-      "maxDuration": 30
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
