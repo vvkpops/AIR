@@ -229,46 +229,6 @@ const parseNotamDateTime = (dateTimeStr) => {
   return null;
 };
 
-const getNotamTypeDescription = (qCode) => {
-  if (!qCode) return 'General';
-  
-  const typeMap = {
-    'QXXXX': 'General',
-    'QRXXX': 'Runway',
-    'QTXXX': 'Taxiway',
-    'QAXXX': 'Apron',
-    'QLXXX': 'Lighting',
-    'QNXXX': 'Navigation',
-    'QFXXX': 'Facilities',
-    'QOXXX': 'Obstacles',
-    'QPXXX': 'Personnel',
-    'QSXXX': 'Services',
-    'QWXXX': 'Warning',
-    'QMXXX': 'Misc',
-    'QCXXX': 'Communications',
-    'QIXXX': 'Instrument Procedures',
-    'QRWXX': 'Runway Closure',
-    'QRWCH': 'Runway Closed',
-    'QTACH': 'Taxiway Closed',
-    'QOBST': 'Obstacle',
-    'QNACS': 'Navigation Aid Closed',
-    'QFALC': 'Approach Light Closed',
-    'QFAPZ': 'Airport Closed'
-  };
-  
-  // Check for exact matches first
-  if (typeMap[qCode]) return typeMap[qCode];
-  
-  // Check for partial matches
-  for (const [code, desc] of Object.entries(typeMap)) {
-    if (qCode.startsWith(code.substring(0, 2))) {
-      return desc;
-    }
-  }
-  
-  return 'General';
-};
-
 // Header Component
 const Header = () => {
   const [localTime, setLocalTime] = useState('');
@@ -305,7 +265,6 @@ const Header = () => {
   );
 };
 
-// Fixed NOTAM Modal Component
 // Improved NOTAM Modal Component
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
@@ -623,6 +582,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     </div>
   );
 };
+
 // Weather Tile Component with Backend API Integration
 const WeatherTile = ({ 
   icao, 
@@ -688,8 +648,7 @@ const WeatherTile = ({
   }, [minimized, storageKey]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
-
-  // Fixed NOTAM fetch function using backend API
+// Fixed NOTAM fetch function using backend API
   const fetchNotamData = async () => {
     setNotamLoading(true);
     setNotamError(null);
