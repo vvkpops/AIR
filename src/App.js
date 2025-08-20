@@ -147,7 +147,6 @@ const WeatherTile = ({
   removeWeatherICAO,
   globalMinimized = false
 }) => {
-  const [tafRaw, setTafRaw] = useState("");
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
   const [loading, setLoading] = useState(true);
@@ -173,7 +172,6 @@ const WeatherTile = ({
         fetchMETAR(icao)
       ]);
       
-      setTafRaw(taf);
       setMetarRaw(metar);
       
       if (taf) {
