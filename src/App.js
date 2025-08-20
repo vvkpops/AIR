@@ -1,5 +1,6 @@
 // (full file, updated handleNotamClick to stop propagation and delay fetch)
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import './index.css';
 
 // Weather utilities
@@ -267,7 +268,6 @@ const Header = () => {
 };
 
 // Simple NOTAM Modal using portal, just raw NOTAM stacked
-import ReactDOM from 'react-dom';
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
   useEffect(() => {
