@@ -28,9 +28,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "FAA_CLIENT_ID": "@faa_client_id",
-    "FAA_CLIENT_SECRET": "@faa_client_secret"
-  }
+  ]
 }
