@@ -62,7 +62,8 @@ code {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
-/* Modal positioning fixes - Add this to your index.css */
+
+/* Fixed Modal positioning and scrolling CSS */
 
 /* Ensure modal overlay stays fixed and covers entire viewport */
 .modal-overlay {
@@ -79,18 +80,24 @@ code {
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
+  padding: 16px !important;
 }
 
-/* Ensure modal content doesn't move */
+/* Ensure modal content doesn't move and is properly sized */
 .modal-content-fixed {
   position: relative !important;
   transform: none !important;
   margin: 0 !important;
   max-width: 95vw !important;
   max-height: 95vh !important;
+  width: 100% !important;
+  max-width: 1200px !important; /* Reasonable max width */
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
+  background-color: #1f2937 !important; /* gray-800 */
+  border-radius: 12px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Prevent body scroll when modal is open */
@@ -99,30 +106,44 @@ code {
   position: fixed !important;
   width: 100% !important;
   height: 100% !important;
+  top: 0 !important;
+  left: 0 !important;
 }
 
 /* Scrollable content area within modal */
 .modal-body-scrollable {
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  max-height: calc(95vh - 140px) !important; /* Account for header and footer */
+  max-height: calc(95vh - 160px) !important; /* Account for header and footer */
   flex: 1 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #6b7280 #374151 !important;
+}
+
+/* Custom scrollbar for webkit browsers */
+.modal-body-scrollable::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.modal-body-scrollable::-webkit-scrollbar-track {
+  background: #374151 !important; /* gray-700 */
+}
+
+.modal-body-scrollable::-webkit-scrollbar-thumb {
+  background: #6b7280 !important; /* gray-500 */
+  border-radius: 4px !important;
+}
+
+.modal-body-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af !important; /* gray-400 */
 }
 
 /* Ensure modal header and footer stay in place */
 .modal-header-fixed,
 .modal-footer-fixed {
-  position: sticky !important;
+  position: relative !important;
   flex-shrink: 0 !important;
   z-index: 10 !important;
-}
-
-.modal-header-fixed {
-  top: 0 !important;
-}
-
-.modal-footer-fixed {
-  bottom: 0 !important;
 }
 
 /* Animation for modal appearance */
@@ -138,15 +159,19 @@ code {
 }
 
 .modal-animate {
-  animation: modalSlideIn 0.2s ease-out;
+  animation: modalSlideIn 0.2s ease-out !important;
 }
 
 /* Responsive modal sizing */
 @media (max-width: 768px) {
+  .modal-overlay {
+    padding: 8px !important;
+  }
+  
   .modal-content-fixed {
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 8px !important;
   }
   
   .modal-body-scrollable {
@@ -154,20 +179,25 @@ code {
   }
 }
 
-/* Prevent any transforms on modal elements */
-.modal-no-transform,
-.modal-no-transform * {
-  transform: none !important;
-  transition: none !important;
-}
-
-/* Focus trap for accessibility */
-.modal-overlay:focus {
-  outline: none;
-}
-
 /* Backdrop blur effect for better visual separation */
 .modal-backdrop-blur {
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* Focus management */
+.modal-overlay:focus {
+  outline: none !important;
+}
+
+/* Ensure no conflicting transforms */
+.modal-overlay *,
+.modal-content-fixed *,
+.modal-body-scrollable * {
+  box-sizing: border-box !important;
+}
+
+/* Smooth scrolling within modal */
+.modal-body-scrollable {
+  scroll-behavior: smooth !important;
 }
