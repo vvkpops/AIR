@@ -1,4 +1,4 @@
-// api/notams.js - Vercel serverless function for NOTAM fetching
+//api/notams.js - Vercel serverless function for NOTAM fetching
 
 export default async function handler(req, res) {
   // Set CORS headers
