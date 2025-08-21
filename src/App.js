@@ -614,14 +614,14 @@ const WeatherTile = ({
         }
       </div>
 
-      {/* NOTAM Button */}
-      <div className="mt-2 text-center">
+      {/* NOTAM Button - subtle positioning */}
+      <div className="mt-2 flex justify-end">
         <button
           onClick={handleNotamClick}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm font-semibold transition-colors"
+          className="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-2 py-1 rounded text-xs font-medium transition-colors border border-gray-600 hover:border-gray-500"
           title={`View NOTAMs for ${icao}`}
         >
-          📋 NOTAMs
+          NOTAMs
         </button>
       </div>
 
