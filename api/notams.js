@@ -1,5 +1,5 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: fallback to NAV CANADA CFPS when FAA returns no NOTAMs for Canadian ICAOs
+// Updated: improved NAV CANADA CFPS fallback with NOTAM text cleanup/normalization
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -88,6 +88,7 @@ export default async function handler(req, res) {
           summary: translation.simpleText || translation.formattedText || core.text || '',
           body: core.text || translation.formattedText || '',
           qLine: core.qLine || (translation.formattedText?.split('\n')[0]) || '',
+          source: 'FAA'
         };
       });
     } else {
@@ -139,25 +140,102 @@ export default async function handler(req, res) {
                 }
               }
 
-              navItems.forEach(it => {
-                // Try to extract text fields from common keys
-                const body = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
-                const number = it.id || it.notamId || it.number || '';
-                const validFrom = it.start || it.begin || it.validFrom || '';
-                const validTo = it.end || it.finish || it.validTo || '';
-                const location = it.site || it.siteCode || upicao;
+              // Helper: clean and normalize NAV CANADA NOTAM text into structured fields
+              const cleanNavNotam = (item, fallbackRaw = '') => {
+                // Prefer explicit raw fields if available
+                const raw = (item.raw || item.notam || item.text || item.description || fallbackRaw || '').replace(/\r/g,'').trim();
 
-                parsed.push({
-                  number,
-                  type: it.type || '',
-                  classification: it.classification || '',
-                  icao: location || upicao,
-                  location: location || upicao,
+                // Remove outer parentheses that sometimes wrap whole payload, and trim
+                let txt = raw.replace(/^\(+/, '').replace(/\)+$/, '').trim();
+
+                // Some payloads start with "H3902/25 NOTAMN" inside parentheses - keep number if present
+                // Split into lines and normalize
+                const lines = txt.split('\n').map(l => l.trim()).filter(Boolean);
+
+                // If the data arrived as a single-line with embedded \n escaped, try to unescape common sequences
+                if (lines.length === 1 && lines[0].includes('\\n')) {
+                  txt = txt.replace(/\\n/g, '\n');
+                }
+
+                const normalizedLines = txt.split('\n').map(l => l.trim()).filter(Boolean);
+
+                // Extract common NOTAM markers:
+                const findLine = (prefix) => normalizedLines.find(l => l.toUpperCase().startsWith(prefix));
+                const qLine = findLine('Q)') || '';
+                const aLine = findLine('A)') || '';
+                const bLine = findLine('B)') || '';
+                const cLine = findLine('C)') || '';
+                const dLine = findLine('D)') || '';
+                const eLine = findLine('E)') || '';
+                const fLine = findLine('F)') || '';
+                const gLine = findLine('G)') || '';
+
+                // Attempt to extract NOTAM number from first line or from a leading token like H3902/25
+                let number = item.id || item.notamId || item.number || '';
+                if (!number) {
+                  const first = normalizedLines[0] || '';
+                  const m = first.match(/([A-Z0-9]+\/\d{2,4})/i);
+                  if (m) number = m[1];
+                }
+
+                // Determine summary and body: prefer E) line for user-facing description
+                const summary = eLine ? eLine.replace(/^E\)\s*/i, '') : (normalizedLines[normalizedLines.length - 1] || '');
+                // Compose a cleaned body: start from first Q) or from first line
+                let body = '';
+                const startIndex = normalizedLines.findIndex(l => /^Q\)/i.test(l));
+                if (startIndex >= 0) {
+                  body = normalizedLines.slice(startIndex).join('\n');
+                } else {
+                  body = normalizedLines.join('\n');
+                }
+
+                // Simple validFrom/validTo extraction - keep raw B/C content so downstream can parse if needed
+                const validFrom = bLine ? bLine.replace(/^B\)\s*/i, '').trim() : (item.start || item.begin || '');
+                const validTo = cLine ? cLine.replace(/^C\)\s*/i, '').trim() : (item.end || item.finish || '');
+
+                return {
+                  number: number || '',
+                  qLine,
+                  aLine: aLine.replace(/^A\)\s*/i, '').trim() || '',
+                  bLine: bLine.replace(/^B\)\s*/i, '').trim() || '',
+                  cLine: cLine.replace(/^C\)\s*/i, '').trim() || '',
+                  dLine: dLine.replace(/^D\)\s*/i, '').trim() || '',
+                  eLine: eLine.replace(/^E\)\s*/i, '').trim() || '',
+                  fLine: fLine.replace(/^F\)\s*/i, '').trim() || '',
+                  gLine: gLine.replace(/^G\)\s*/i, '').trim() || '',
+                  rawText: body,
+                  summary: summary,
+                  body: body,
                   validFrom,
                   validTo,
-                  summary: (typeof body === 'string' ? (body.split('\n')[0] || body) : ''),
-                  body: typeof body === 'string' ? body : JSON.stringify(body),
-                  qLine: it.qLine || ''
+                  isPermanent: /PERM/i.test(cLine || item.c || item.validTo || '')
+                };
+              };
+
+              navItems.forEach(it => {
+                const normalized = cleanNavNotam(it, rawText);
+                parsed.push({
+                  number: normalized.number,
+                  type: it.type || '',
+                  classification: it.classification || '',
+                  icao: normalized.aLine || upicao,
+                  location: normalized.aLine || upicao,
+                  validFrom: normalized.validFrom || '',
+                  validTo: normalized.validTo || '',
+                  summary: normalized.summary || '',
+                  body: normalized.body || normalized.rawText || '',
+                  qLine: normalized.qLine || '',
+                  rawText: normalized.rawText || '',
+                  // include parsed NOTAM lines for richer downstream UI
+                  aLine: normalized.aLine || '',
+                  bLine: normalized.bLine || '',
+                  cLine: normalized.cLine || '',
+                  dLine: normalized.dLine || '',
+                  eLine: normalized.eLine || '',
+                  fLine: normalized.fLine || '',
+                  gLine: normalized.gLine || '',
+                  isPermanent: normalized.isPermanent || false,
+                  source: 'NAVCAN'
                 });
               });
             } else {
@@ -165,17 +243,53 @@ export default async function handler(req, res) {
               const chunks = rawText.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
               if (chunks.length > 0) {
                 chunks.forEach((chunk, idx) => {
+                  // Clean chunk similarly to JSON path
+                  const fakeItem = { raw: chunk };
+                  const normalized = (() => {
+                    const raw = chunk.replace(/\r/g,'').replace(/^\(+/, '').replace(/\)+$/, '').trim();
+                    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+                    const qLine = lines.find(l => /^Q\)/i.test(l)) || '';
+                    const eLine = lines.find(l => /^E\)/i.test(l)) || '';
+                    const aLine = lines.find(l => /^A\)/i.test(l)) || '';
+                    const cLine = lines.find(l => /^C\)/i.test(l)) || '';
+                    const bLine = lines.find(l => /^B\)/i.test(l)) || '';
+                    const m = raw.match(/([A-Z0-9]+\/\d{2,4})/i);
+                    return {
+                      number: m ? m[1] : `${upicao}-NAVCAN-${idx+1}`,
+                      qLine,
+                      aLine: aLine.replace(/^A\)\s*/i, '').trim() || upicao,
+                      bLine: bLine.replace(/^B\)\s*/i, '').trim() || '',
+                      cLine: cLine.replace(/^C\)\s*/i, '').trim() || '',
+                      eLine: eLine.replace(/^E\)\s*/i, '').trim() || lines[lines.length-1] || '',
+                      rawText: raw,
+                      body: raw,
+                      validFrom: bLine.replace(/^B\)\s*/i, '').trim() || '',
+                      validTo: cLine.replace(/^C\)\s*/i, '').trim() || '',
+                      isPermanent: /PERM/i.test(cLine)
+                    };
+                  })();
+
                   parsed.push({
-                    number: `${upicao}-NAVCAN-${idx+1}`,
+                    number: normalized.number,
                     type: '',
                     classification: '',
                     icao: upicao,
-                    location: upicao,
-                    validFrom: '',
-                    validTo: '',
-                    summary: chunk.split('\n')[0] || '',
-                    body: chunk,
-                    qLine: ''
+                    location: normalized.aLine || upicao,
+                    validFrom: normalized.validFrom || '',
+                    validTo: normalized.validTo || '',
+                    summary: normalized.eLine || '',
+                    body: normalized.body || normalized.rawText || '',
+                    qLine: normalized.qLine || '',
+                    rawText: normalized.rawText || '',
+                    aLine: normalized.aLine || '',
+                    bLine: normalized.bLine || '',
+                    cLine: normalized.cLine || '',
+                    dLine: '',
+                    eLine: normalized.eLine || '',
+                    fLine: '',
+                    gLine: '',
+                    isPermanent: normalized.isPermanent || false,
+                    source: 'NAVCAN'
                   });
                 });
               }
@@ -194,7 +308,10 @@ export default async function handler(req, res) {
     parsed = parsed.filter(n => {
       if (!n.validTo) return true; // keep if end time missing
       try {
-        return new Date(n.validTo) >= now;
+        // keep if validTo can't be parsed (string tokens like "PERM")
+        const t = new Date(n.validTo);
+        if (isNaN(t.getTime())) return true;
+        return t >= now;
       } catch {
         return true;
       }
@@ -202,13 +319,13 @@ export default async function handler(req, res) {
 
     // Dispatcher-priority sort:
     parsed.sort((a, b) => {
-      const isClosureA = /clsd|closed/i.test(a.summary || '');
-      const isRscA = /rsc/i.test(a.summary || '');
-      const isCrfiA = /crfi/i.test(a.summary || '');
+      const isClosureA = /clsd|closed/i.test(a.summary || a.body || '');
+      const isRscA = /rsc/i.test(a.summary || a.body || '');
+      const isCrfiA = /crfi/i.test(a.summary || a.body || '');
 
-      const isClosureB = /clsd|closed/i.test(b.summary || '');
-      const isRscB = /rsc/i.test(b.summary || '');
-      const isCrfiB = /crfi/i.test(b.summary || '');
+      const isClosureB = /clsd|closed/i.test(b.summary || b.body || '');
+      const isRscB = /rsc/i.test(b.summary || b.body || '');
+      const isCrfiB = /crfi/i.test(b.summary || b.body || '');
 
       // Priority 1: Runway closure
       if (isClosureA && !isClosureB) return -1;
@@ -224,7 +341,9 @@ export default async function handler(req, res) {
 
       // Then, most recent validFrom first
       try {
-        return new Date(b.validFrom || 0) - new Date(a.validFrom || 0);
+        const ta = new Date(a.validFrom || 0).getTime() || 0;
+        const tb = new Date(b.validFrom || 0).getTime() || 0;
+        return tb - ta;
       } catch {
         return 0;
       }
