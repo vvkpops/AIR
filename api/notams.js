@@ -1,13 +1,17 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: improved NAV CANADA CFPS fallback with NOTAM text cleanup/normalization
-// Uses normalization logic adapted from your front-end alphaParsers to split A)/B)/C)/E) when jammed.
+// Updated: NAV CANADA CFPS fallback preserves original raw payload (raw) and returns
+// an `english` field (cleaned/normalized) and `french` (null when not provided).
+// Keeps structured fields (aLine/bLine/cLine/summary/body/etc.) for the frontend.
 
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -38,6 +42,7 @@ export default async function handler(req, res) {
   function stripSurroundingParens(s) {
     if (!s) return '';
     s = String(s).trim();
+    // remove only one outer pair if they wrap the whole string
     if (s.startsWith('(') && s.endsWith(')')) {
       return s.slice(1, -1).trim();
     }
@@ -48,7 +53,7 @@ export default async function handler(req, res) {
     if (!s) return '';
     let txt = String(s).replace(/\r/g, '').trim();
 
-    // Unwrap outer parentheses repeatedly (safe guard)
+    // Unwrap repeated outer parentheses if present (safe-guard limited loops)
     let loopGuard = 0;
     while (txt.startsWith('(') && txt.endsWith(')') && loopGuard < 5) {
       const inner = txt.slice(1, -1).trim();
@@ -62,23 +67,23 @@ export default async function handler(req, res) {
       txt = txt.replace(/\\n/g, '\n');
     }
 
-    // Ensure newline after NOTAM header
+    // Ensure newline after NOTAM header when it's jammed
     txt = txt.replace(/(NOTAMN?|NOTAMR?)(\s*)(?=[A-Z0-9()\/\s]+)/i, (m, p1) => `${p1}\n`);
 
-    // Insert newline before token markers like "Q)", "A)", "B)", ... even if they are on same line
+    // Insert newline before token markers like "Q)", "A)", "B)", ... even when jammed on same line
     txt = txt.replace(/(^|\s)([QABCDEFG]\))/g, '\n$2');
 
     // handle cases like ")A)" or ")A) " without a space
     txt = txt.replace(/\)\s*([A-GQ]\))/g, ')\n$1');
 
-    // replace multiple blank lines with double newline
+    // replace multiple blank lines with single blank-line separation
     txt = txt.replace(/\n{2,}/g, '\n\n');
 
     // Trim and collapse spaces on each line
-    const lines = txt.split('\n').map(l => l.replace(/\s+/g, ' ').trim());
+    const lines = txt.split('\n').map((l) => l.replace(/\s+/g, ' ').trim());
 
     // Ensure token lines have trailing space after token marker
-    const cleaned = lines.map(l => l.replace(/^([A-GQ]\))\s*/i, (m, p1) => `${p1} `));
+    const cleaned = lines.map((l) => l.replace(/^([A-GQ]\))\s*/i, (m, p1) => `${p1} `));
 
     return cleaned.join('\n').trim();
   }
@@ -86,11 +91,12 @@ export default async function handler(req, res) {
   function extractRawField(val) {
     if (val === null || val === undefined) return '';
 
+    // If it's already a string, handle JSON-encoded or plain
     if (typeof val === 'string') {
       let s = val.trim();
 
-      // If it's JSON encoded text, try to parse and extract preferred fields
-      if ((s.startsWith('{') || s.startsWith('['))) {
+      // If the string itself is JSON object/array, try to parse it and extract nested raw/text
+      if (s.startsWith('{') || s.startsWith('[')) {
         try {
           const parsed = JSON.parse(s);
           if (parsed && typeof parsed === 'object') {
@@ -103,7 +109,6 @@ export default async function handler(req, res) {
             if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim()) {
               return normalizeAlphaNotamText(stripSurroundingParens(parsed.text));
             }
-            // fallback to pretty JSON
             return JSON.stringify(parsed, null, 2);
           }
         } catch (e) {
@@ -112,7 +117,8 @@ export default async function handler(req, res) {
       }
 
       const stripped = stripSurroundingParens(s);
-      const looksLikeNotam = /NOTAM|Q\)|A\)|B\)|C\)|E\)/i.test(stripped) || /[A-Z0-9]+\/\d{2,4}\s+NOTAM/i.test(stripped);
+      const looksLikeNotam =
+        /NOTAM|Q\)|A\)|B\)|C\)|E\)/i.test(stripped) || /[A-Z0-9]+\/\d{2,4}\s+NOTAM/i.test(stripped);
 
       if (looksLikeNotam) {
         return normalizeAlphaNotamText(stripped);
@@ -120,13 +126,16 @@ export default async function handler(req, res) {
       return stripped.replace(/\s+/g, ' ').trim();
     }
 
+    // If it's an object
     if (typeof val === 'object') {
       if (Array.isArray(val)) {
-        if (val.every(v => typeof v === 'string')) {
-          return val.map(v => normalizeAlphaNotamText(stripSurroundingParens(v))).join('\n\n');
+        if (val.every((v) => typeof v === 'string')) {
+          return val.map((v) => normalizeAlphaNotamText(stripSurroundingParens(v))).join('\n\n');
         }
         try {
-          const parts = val.map(it => (typeof it === 'string' ? normalizeAlphaNotamText(stripSurroundingParens(it)) : extractRawField(it)));
+          const parts = val.map((it) =>
+            typeof it === 'string' ? normalizeAlphaNotamText(stripSurroundingParens(it)) : extractRawField(it)
+          );
           return parts.join('\n\n');
         } catch {}
       }
@@ -135,7 +144,8 @@ export default async function handler(req, res) {
       for (const k of preferred) {
         if (val[k] && typeof val[k] === 'string' && val[k].trim()) {
           const candidate = stripSurroundingParens(val[k]);
-          const looksLikeNotam = /NOTAM|Q\)|A\)|B\)|C\)|E\)/i.test(candidate) || /[A-Z0-9]+\/\d{2,4}\s+NOTAM/i.test(candidate);
+          const looksLikeNotam =
+            /NOTAM|Q\)|A\)|B\)|C\)|E\)/i.test(candidate) || /[A-Z0-9]+\/\d{2,4}\s+NOTAM/i.test(candidate);
           return looksLikeNotam ? normalizeAlphaNotamText(candidate) : candidate.replace(/\s+/g, ' ').trim();
         }
         if (val[k] && typeof val[k] === 'object') {
@@ -162,6 +172,26 @@ export default async function handler(req, res) {
     }
 
     return String(val);
+  }
+
+  // New helper to capture the original raw payload (without normalization) where possible
+  function captureOriginalRawSource(it) {
+    if (!it) return '';
+    // prefer original string fields in order of likelihood
+    const candidates = ['raw', 'notam', 'text', 'english', 'body', 'report'];
+    for (const k of candidates) {
+      if (it[k] && typeof it[k] === 'string' && it[k].trim()) {
+        return it[k].trim();
+      }
+    }
+    // if it's a string already (e.g. navResp returned a string)
+    if (typeof it === 'string' && it.trim()) return it.trim();
+    // fallback to JSON string of the object (compact)
+    try {
+      return JSON.stringify(it);
+    } catch {
+      return '';
+    }
   }
 
   function parseNotamDateTime(dateTimeStr) {
@@ -191,14 +221,14 @@ export default async function handler(req, res) {
   try {
     const upicao = icao.toUpperCase();
     const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?icaoLocation=${upicao}&responseFormat=geoJson&pageSize=1000`;
-    
+
     console.log(`[API] Fetching NOTAMs for ${upicao} from FAA: ${faaUrl}`);
 
     const faaResp = await fetch(faaUrl, {
       headers: {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'Accept': 'application/json'
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        Accept: 'application/json'
       },
       timeout: 10000
     });
@@ -208,7 +238,6 @@ export default async function handler(req, res) {
       if (faaResp.status === 429) {
         return res.status(429).json({ error: 'Rate limit exceeded' });
       }
-      // For server 5xx/4xx, continue to attempt fallback for Canadian ICAOs only
       if (!(upicao[0] === 'C')) {
         return res.status(faaResp.status).json({ error: `FAA API error: ${faaResp.status} ${faaResp.statusText}` });
       }
@@ -229,11 +258,19 @@ export default async function handler(req, res) {
     let parsed = [];
     if (faaItems.length > 0) {
       console.log(`[API] Received ${faaItems.length} items from FAA API`);
-      parsed = faaItems.map(item => {
+      parsed = faaItems.map((item) => {
         const core = item.properties?.coreNOTAMData?.notam || {};
         const translation = (item.properties?.coreNOTAMData?.notamTranslation || [])[0] || {};
         const icaoLocation = core.icaoLocation || core.location || upicao;
-        
+
+        // preserve original raw if available for FAA entries too
+        const originalRaw =
+          core.text?.trim() ||
+          translation.formattedText?.trim() ||
+          translation.simpleText?.trim() ||
+          core.raw?.trim?.() ||
+          '';
+
         return {
           number: core.number || '',
           type: core.type || '',
@@ -245,7 +282,11 @@ export default async function handler(req, res) {
           summary: translation.simpleText || translation.formattedText || core.text || '',
           body: core.text || translation.formattedText || '',
           qLine: core.qLine || (translation.formattedText?.split('\n')[0]) || '',
-          source: 'FAA'
+          source: 'FAA',
+          // preserve original-ish alpha fields for UI compatibility
+          raw: originalRaw || '',
+          english: translation.simpleText || translation.formattedText || core.text || null,
+          french: null
         };
       });
     } else {
@@ -256,7 +297,7 @@ export default async function handler(req, res) {
           console.log(`[API] FAA returned no NOTAMs for ${upicao}. Fetching NAV CANADA CFPS: ${navUrl}`);
 
           const navResp = await fetch(navUrl, {
-            headers: { 'Accept': 'application/json, text/plain, */*' },
+            headers: { Accept: 'application/json, text/plain, */*' },
             timeout: 10000
           });
 
@@ -277,30 +318,35 @@ export default async function handler(req, res) {
 
             if (navData) {
               if (Array.isArray(navData)) {
-                navData.forEach(it => navItems.push(it));
+                navData.forEach((it) => navItems.push(it));
               } else if (navData.notam && Array.isArray(navData.notam)) {
-                navData.notam.forEach(it => navItems.push(it));
+                navData.notam.forEach((it) => navItems.push(it));
               } else if (navData.Alpha && Array.isArray(navData.Alpha)) {
-                navData.Alpha.forEach(it => navItems.push(it));
+                navData.Alpha.forEach((it) => navItems.push(it));
               } else {
-                const arrays = Object.values(navData).filter(v => Array.isArray(v) && v.length > 0);
+                const arrays = Object.values(navData).filter((v) => Array.isArray(v) && v.length > 0);
                 if (arrays.length > 0) {
-                  arrays[0].forEach(it => navItems.push(it));
+                  arrays[0].forEach((it) => navItems.push(it));
                 } else {
                   navItems.push(navData);
                 }
               }
 
               // Normalize each nav item using the extractRawField helper and token parsing
-              navItems.forEach(it => {
-                const rawCandidate = extractRawField(it.raw || it.notam || it.text || it.english || it);
-                const cleaned = normalizeAlphaNotamText(rawCandidate || '');
+              navItems.forEach((it) => {
+                // Capture original raw payload (unmodified where possible)
+                const originalRaw = captureOriginalRawSource(it) || '';
+                // englishClean will be normalized human-readable text (split tokens etc.)
+                const englishClean = extractRawField(it.raw || it.notam || it.text || it.english || it);
+
+                // cleaned is already normalized by extractRawField, but run normalize to ensure token splits
+                const cleaned = normalizeAlphaNotamText(englishClean || originalRaw || '');
 
                 // split into lines
-                const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+                const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean);
 
                 // helpers to find token lines (we normalized, so tokens should be on their own lines)
-                const findLine = prefix => lines.find(l => l.toUpperCase().startsWith(prefix)) || '';
+                const findLine = (prefix) => lines.find((l) => l.toUpperCase().startsWith(prefix)) || '';
                 const qLine = findLine('Q)') || '';
                 const aLine = (findLine('A)') || '').replace(/^A\)\s*/i, '').trim();
                 const bLine = (findLine('B)') || '').replace(/^B\)\s*/i, '').trim();
@@ -320,15 +366,17 @@ export default async function handler(req, res) {
 
                 // For body, prefer from Q) onward (Q) included) or fallback to whole cleaned text
                 let body = '';
-                const qIndex = lines.findIndex(l => /^Q\)/i.test(l));
+                const qIndex = lines.findIndex((l) => /^Q\)/i.test(l));
                 if (qIndex >= 0) {
                   body = lines.slice(qIndex).join('\n');
                 } else {
                   body = cleaned;
                 }
 
-                const validFromIso = parseNotamDateTime(bLine) || (it.start ? parseNotamDateTime(it.start) : null) || bLine || '';
-                const validToIso = parseNotamDateTime(cLine) || (it.end ? parseNotamDateTime(it.end) : null) || cLine || '';
+                const validFromIso =
+                  parseNotamDateTime(bLine) || (it.start ? parseNotamDateTime(it.start) : null) || bLine || '';
+                const validToIso =
+                  parseNotamDateTime(cLine) || (it.end ? parseNotamDateTime(it.end) : null) || cLine || '';
 
                 parsed.push({
                   number: number || '',
@@ -341,7 +389,11 @@ export default async function handler(req, res) {
                   summary: eLine || lines[lines.length - 1] || '',
                   body: body || cleaned || '',
                   qLine: qLine || '',
-                  rawText: cleaned || rawCandidate || '',
+                  // Preserve both original raw and normalized english text for frontend compatibility:
+                  raw: originalRaw || cleaned || '',
+                  english: cleaned || null,
+                  french: null,
+                  rawText: cleaned || originalRaw || '',
                   aLine: aLine || '',
                   bLine: bLine || '',
                   cLine: cLine || '',
@@ -355,14 +407,18 @@ export default async function handler(req, res) {
               });
             } else {
               // navData not JSON - fallback: try to split rawText into chunks and normalize each chunk
-              const chunks = rawText.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+              const chunks = rawText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
               if (chunks.length === 0 && rawText.trim()) chunks.push(rawText.trim());
 
               chunks.forEach((chunk, idx) => {
-                const cleaned = normalizeAlphaNotamText(extractRawField(chunk));
-                const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+                // chunk is the originalRaw here
+                const originalRaw = chunk;
+                const englishClean = extractRawField(chunk);
+                const cleaned = normalizeAlphaNotamText(englishClean || originalRaw || '');
 
-                const findLine = prefix => lines.find(l => l.toUpperCase().startsWith(prefix)) || '';
+                const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean);
+
+                const findLine = (prefix) => lines.find((l) => l.toUpperCase().startsWith(prefix)) || '';
                 const qLine = findLine('Q)') || '';
                 const aLine = (findLine('A)') || '').replace(/^A\)\s*/i, '').trim();
                 const bLine = (findLine('B)') || '').replace(/^B\)\s*/i, '').trim();
@@ -370,9 +426,9 @@ export default async function handler(req, res) {
                 const eLine = (findLine('E)') || '').replace(/^E\)\s*/i, '').trim();
 
                 const m = chunk.match(/([A-Z0-9]+\/\d{2,4})/i);
-                const number = m ? m[1] : `${upicao}-NAVCAN-${idx+1}`;
+                const number = m ? m[1] : `${upicao}-NAVCAN-${idx + 1}`;
 
-                const body = (qLine ? lines.slice(lines.findIndex(l => /^Q\)/i.test(l))).join('\n') : cleaned);
+                const body = qLine ? lines.slice(lines.findIndex((l) => /^Q\)/i.test(l))).join('\n') : cleaned;
 
                 const validFromIso = parseNotamDateTime(bLine) || '';
                 const validToIso = parseNotamDateTime(cLine) || '';
@@ -388,7 +444,10 @@ export default async function handler(req, res) {
                   summary: eLine || lines[lines.length - 1] || '',
                   body: body || cleaned || '',
                   qLine: qLine || '',
-                  rawText: cleaned || '',
+                  raw: originalRaw || '',
+                  english: cleaned || null,
+                  french: null,
+                  rawText: cleaned || originalRaw || '',
                   aLine: aLine || '',
                   bLine: bLine || '',
                   cLine: cLine || '',
@@ -406,13 +465,15 @@ export default async function handler(req, res) {
           console.error(`[API] Error fetching NAV CANADA CFPS for ${upicao}:`, navErr);
         }
       } else {
-        console.log(`[API] FAA returned no NOTAMs for ${upicao} and ICAO is not Canadian — returning empty list`);
+        console.log(
+          `[API] FAA returned no NOTAMs for ${upicao} and ICAO is not Canadian — returning empty list`
+        );
       }
     }
 
     // Filter for currently valid or future NOTAMs only
     const now = new Date();
-    parsed = parsed.filter(n => {
+    parsed = parsed.filter((n) => {
       if (!n.validTo) return true; // keep if end time missing
       try {
         const t = new Date(n.validTo);
@@ -459,22 +520,21 @@ export default async function handler(req, res) {
     parsed = parsed.slice(0, 50);
 
     console.log(`[API] Sending ${parsed.length} processed NOTAMs for ${upicao}`);
-    
+
     // Set cache headers
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600'); // 5 min cache, 10 min stale
-    
-    return res.status(200).json(parsed);
 
+    return res.status(200).json(parsed);
   } catch (error) {
     console.error(`[API] Error fetching NOTAMs for ${req.query.icao}:`, error);
-    
+
     if (error.name === 'AbortError' || (error.message && error.message.includes('timeout'))) {
       return res.status(504).json({ error: 'Request timeout' });
     }
-    
-    return res.status(500).json({ 
-      error: 'Failed to fetch NOTAMs', 
-      details: error.message 
+
+    return res.status(500).json({
+      error: 'Failed to fetch NOTAMs',
+      details: error.message
     });
   }
 }
