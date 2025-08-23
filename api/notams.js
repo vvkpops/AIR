@@ -1,7 +1,6 @@
 // api/notams.js
-// Lightweight NOTAM proxy with a small NAV CANADA CFPS fallback for Canadian ICAOs.
-// Goal: keep this file small and predictable — preserve original NAV CANADA raw payload
-// and return a cleaned `english` string (plus some basic parsed fields) when FAA returns nothing.
+// Minimal NOTAM proxy with NAV CANADA CFPS fallback that re-uses the frontend parser
+// (src/utils/parsers/alphaParsers.js) to avoid duplicating normalization logic.
 
 export default async function handler(req, res) {
   // CORS
@@ -16,49 +15,53 @@ export default async function handler(req, res) {
   }
   const upicao = icao.toUpperCase();
 
-  // FAA credentials (optional): if not set, we'll still attempt NAVCAN fallback for Canadian ICAOs
   const CLIENT_ID = process.env.REACT_APP_FAA_CLIENT_ID;
   const CLIENT_SECRET = process.env.REACT_APP_FAA_API_KEY;
 
-  // Small helpers --------------------------------------------------------------
-  const stripParens = s => (typeof s === 'string' ? s.replace(/^\(+|\)+$/g, '').trim() : '');
+  // Try to dynamically import the frontend parser so server uses the exact same logic
+  let parseRawAlpha;
+  try {
+    // path relative to api/ directory -> ../src/utils/...
+    const mod = await import('../src/utils/parsers/alphaParsers.js');
+    parseRawAlpha = mod.parseRawAlpha;
+  } catch (err) {
+    // Fallback: very small no-op parser that returns string input (keeps server resilient)
+    parseRawAlpha = (v) => {
+      if (v == null) return '';
+      if (typeof v === 'string') return v.trim();
+      if (typeof v === 'object') {
+        return (v.english || v.raw || v.text || JSON.stringify(v)).toString().trim();
+      }
+      return String(v);
+    };
+    console.warn('Could not import parseRawAlpha; using fallback parser.', err?.message || err);
+  }
 
-  // Normalise jammed A)/B)/C)/E) tokens onto separate lines and collapse whitespace.
-  const normalizeNotamText = (txt) => {
-    if (!txt) return '';
-    let t = String(txt).replace(/\r/g, '').trim();
-
-    // Unescape common escaped newline sequences
-    t = t.replace(/\\n/g, '\n');
-
-    // Remove surrounding single outer parentheses if they wrap the whole payload
-    if (t.startsWith('(') && t.endsWith(')')) {
-      t = t.slice(1, -1).trim();
+  // small helper to capture original raw from different shapes
+  const captureOriginalRaw = (it, navRawText) => {
+    if (!it && !navRawText) return '';
+    if (typeof it === 'string') return it.trim();
+    if (it && typeof it === 'object') {
+      if (it.raw && typeof it.raw === 'string') return it.raw.trim();
+      if (it.notam && typeof it.notam === 'string') return it.notam.trim();
+      if (it.text && typeof it.text === 'string') return it.text.trim();
+      if (it.english && typeof it.english === 'string') return it.english.trim();
     }
-
-    // Put tokens on their own lines: Q) A) B) C) D) E) F) G)
-    // This handles cases like "A) CZQX B) 2508070901 C) 2511051800EST"
-    t = t.replace(/\s*([QABCDEFG]\))/gi, '\n$1');
-
-    // Ensure token lines have a trailing space after "A)" etc.
-    t = t.split('\n').map(l => l.trim().replace(/^([QABCDEFG]\))\s*/i, '$1 ')).filter(Boolean).join('\n');
-
-    // Collapse multiple internal spaces
-    t = t.replace(/[ \t]{2,}/g, ' ');
-
-    return t.trim();
+    if (navRawText && typeof navRawText === 'string') return navRawText.trim();
+    try { return JSON.stringify(it); } catch { return ''; }
   };
 
-  // Extract A/B/C/E simple lines from a normalized block
-  const extractToken = (block, token) => {
+  // basic token extractors (non-destructive)
+  const extractTokenSimple = (block, token) => {
     if (!block) return '';
-    const re = new RegExp(`^${token}\\)\\s*(.*)$`, 'im');
+    const re = new RegExp(`${token}\\)\\s*([^\\n\\r]*)`, 'i');
     const m = block.match(re);
     return m ? m[1].trim() : '';
   };
 
-  // Try FAA first (if credentials available)
   let parsed = [];
+
+  // Try FAA first (if credentials present)
   try {
     if (CLIENT_ID && CLIENT_SECRET) {
       const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?icaoLocation=${upicao}&responseFormat=geoJson&pageSize=1000`;
@@ -67,8 +70,7 @@ export default async function handler(req, res) {
           client_id: CLIENT_ID,
           client_secret: CLIENT_SECRET,
           Accept: 'application/json'
-        },
-        // keep short timeout expectations for serverless
+        }
       });
 
       if (faaResp.ok) {
@@ -79,10 +81,10 @@ export default async function handler(req, res) {
             parsed = items.map(item => {
               const core = item.properties?.coreNOTAMData?.notam || {};
               const translation = (item.properties?.coreNOTAMData?.notamTranslation || [])[0] || {};
-              const raw = core.text || translation.formattedText || translation.simpleText || '';
-              const english = raw ? normalizeNotamText(raw) : null;
+              const originalRaw = core.text || translation.formattedText || translation.simpleText || '';
+              const english = parseRawAlpha(originalRaw || core || translation) || null;
               return {
-                raw: raw || '',
+                raw: originalRaw || '',
                 english,
                 french: null,
                 number: core.number || '',
@@ -94,11 +96,9 @@ export default async function handler(req, res) {
             });
           }
         } catch (e) {
-          // parse error – we'll continue to fallback if needed
-          console.warn('FAA parse error', e?.message);
+          console.warn('FAA parse error', e?.message || e);
         }
       } else {
-        // non-OK from FAA: if non-Canadian, bail with an error, else try NAVCAN below
         if (!upicao.startsWith('C')) {
           return res.status(faaResp.status).json({ error: `FAA API error: ${faaResp.status} ${faaResp.statusText}` });
         }
@@ -107,69 +107,58 @@ export default async function handler(req, res) {
     }
   } catch (e) {
     console.warn('FAA fetch error', e?.message || e);
-    // continue to NAVCAN fallback for Canadian ICAOs
   }
 
-  // If FAA returned nothing and this is a Canadian ICAO, try NAV CANADA CFPS
+  // NAV CANADA CFPS fallback if FAA produced no results and ICAO is Canadian
   if (parsed.length === 0 && upicao.startsWith('C')) {
     try {
-      // NAV CANADA alpha API (may return JSON or raw text)
       const navUrl = `https://plan.navcanada.ca/weather/api/alpha/?site=${upicao}&alpha=notam`;
       const navResp = await fetch(navUrl, { headers: { Accept: 'application/json, text/plain, */*' } });
       const rawText = await navResp.text();
 
-      // Try JSON first
       let navData = null;
-      try { navData = JSON.parse(rawText); } catch (e) { navData = null; }
+      try { navData = JSON.parse(rawText); } catch (_) { navData = null; }
 
       const items = [];
       if (navData) {
-        // NAV result shapes vary; try reasonable keys then fallback
-        if (Array.isArray(navData)) {
-          navData.forEach(i => items.push(i));
-        } else if (Array.isArray(navData.notam)) {
-          navData.notam.forEach(i => items.push(i));
-        } else if (Array.isArray(navData.Alpha)) {
-          navData.Alpha.forEach(i => items.push(i));
-        } else {
-          // flatten first found array value or take the object itself
+        if (Array.isArray(navData)) items.push(...navData);
+        else if (Array.isArray(navData.notam)) items.push(...navData.notam);
+        else if (Array.isArray(navData.Alpha)) items.push(...navData.Alpha);
+        else {
           const arr = Object.values(navData).find(v => Array.isArray(v));
-          if (arr) arr.forEach(i => items.push(i));
+          if (arr) items.push(...arr);
           else items.push(navData);
         }
       } else {
-        // Not JSON — split into chunks separated by blank lines (common)
+        // treat raw text as a single item or split on blank lines
         const chunks = rawText.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
         if (chunks.length === 0 && rawText.trim()) chunks.push(rawText.trim());
         chunks.forEach(c => items.push({ raw: c }));
       }
 
-      // For each item try to preserve original raw and produce a cleaned english string
       items.forEach(it => {
-        // collect the original raw as best we can
-        let originalRaw = '';
-        if (typeof it === 'string') originalRaw = it;
-        else if (it.raw && typeof it.raw === 'string') originalRaw = it.raw;
-        else if (it.notam && typeof it.notam === 'string') originalRaw = it.notam;
-        else if (it.text && typeof it.text === 'string') originalRaw = it.text;
-        else if (it.english && typeof it.english === 'string') originalRaw = it.english;
-        else originalRaw = JSON.stringify(it);
+        const originalRaw = captureOriginalRaw(it, rawText);
+        // parseRawAlpha accepts either the whole item or a string; prefer item so it can find english/french/raw fields
+        let english;
+        try {
+          english = parseRawAlpha(it) || parseRawAlpha(originalRaw) || null;
+        } catch {
+          english = (originalRaw || '').toString();
+        }
 
-        originalRaw = originalRaw.trim();
+        // small, safe token extraction from the normalized english text (if present)
+        const aLine = extractTokenSimple(english, 'A') || (it.site || it.station || it.siteCode || '');
+        const bLine = extractTokenSimple(english, 'B') || (it.start || it.begin || '');
+        const cLine = extractTokenSimple(english, 'C') || (it.end || it.finish || '');
+        const eLine = extractTokenSimple(english, 'E') || '';
 
-        const english = normalizeNotamText(originalRaw);
-        const aLine = extractToken(english, 'A') || it.site || it.station || '';
-        const bLine = extractToken(english, 'B') || '';
-        const cLine = extractToken(english, 'C') || '';
-        const eLine = extractToken(english, 'E') || '';
-
-        // attempt to find NOTAM number token like H3902/25 in top of block
-        const firstLine = english.split('\n')[0] || originalRaw.split('\n')[0] || '';
-        const m = firstLine.match(/([A-Z0-9]+\/\d{2,4})/i);
-        const number = it.id || it.notamId || it.number || (m ? m[1] : '');
+        // try to discover NOTAM number if present in top of block
+        const firstLine = (english && english.split('\n')[0]) || (originalRaw && originalRaw.split('\n')[0]) || '';
+        const numMatch = firstLine.match(/([A-Z0-9]+\/\d{2,4})/i);
+        const number = it.id || it.notamId || it.number || (numMatch ? numMatch[1] : '');
 
         parsed.push({
-          raw: originalRaw,
+          raw: originalRaw || '',
           english: english || null,
           french: null,
           number: number || '',
@@ -178,7 +167,7 @@ export default async function handler(req, res) {
           bLine: bLine || '',
           cLine: cLine || '',
           summary: eLine || '',
-          body: english || originalRaw,
+          body: english || originalRaw || '',
           source: 'NAVCAN'
         });
       });
@@ -187,8 +176,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // Final: return parsed array (may be empty)
-  // Keep the response compact and predictable: array of objects with raw/english/french and a few fields
-  res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300'); // short caching
+  res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
   return res.status(200).json(parsed);
 }
