@@ -1,5 +1,8 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: fallback to NAV CANADA CFPS when FAA returns no NOTAMs for Canadian ICAOs
+// Updated: better normalization for NAV CANADA CFPS responses so raw NOTAM text is returned
+// - prefer `raw` / `notam` / `text` fields when present
+// - attempt to parse JSON-wrapped strings like '{"raw":"(...)"}'
+// - ensure `body` is always a plain string (no object wrapper)
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -77,6 +80,9 @@ export default async function handler(req, res) {
         const translation = (item.properties?.coreNOTAMData?.notamTranslation || [])[0] || {};
         const icaoLocation = core.icaoLocation || core.location || upicao;
         
+        // prefer formatted text from translation, fallback to core text
+        const rawBody = translation.formattedText || translation.simpleText || core.text || '';
+
         return {
           number: core.number || '',
           type: core.type || '',
@@ -86,7 +92,7 @@ export default async function handler(req, res) {
           validFrom: core.effectiveStart || core.issued || '',
           validTo: core.effectiveEnd || '',
           summary: translation.simpleText || translation.formattedText || core.text || '',
-          body: core.text || translation.formattedText || '',
+          body: rawBody,
           qLine: core.qLine || (translation.formattedText?.split('\n')[0]) || '',
         };
       });
@@ -109,12 +115,19 @@ export default async function handler(req, res) {
             let navData = null;
             const rawText = await navResp.text();
 
+            // If response is a JSON string that contains the object with `raw`, extract it first
+            let maybeJson = null;
             try {
-              navData = JSON.parse(rawText);
+              maybeJson = JSON.parse(rawText);
             } catch (e) {
-              // Not JSON — attempt to extract JSON blob from HTML or fallback to returning raw text as a single NOTAM
-              // Common NAV CANADA responses are JSON, but guard against HTML
-              console.warn('[API] NAV CANADA response is not JSON; will attempt simple scraping fallback');
+              // not JSON - keep rawText as-is
+            }
+
+            if (maybeJson) {
+              navData = maybeJson;
+            } else {
+              // If it's not JSON we will try to detect JSON-like blobs inside (best-effort)
+              navData = null;
             }
 
             const navItems = [];
@@ -140,8 +153,46 @@ export default async function handler(req, res) {
               }
 
               navItems.forEach(it => {
-                // Try to extract text fields from common keys
-                const body = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
+                // Robustly extract a textual body from many possible shapes
+                let body = '';
+
+                // If the item is already a string, use it
+                if (typeof it === 'string') {
+                  body = it;
+                } else {
+                  // common fields
+                  if (it.raw && typeof it.raw === 'string') body = it.raw;
+                  else if (it.notam && typeof it.notam === 'string') body = it.notam;
+                  else if (it.text && typeof it.text === 'string') body = it.text;
+                  else if (it.body && typeof it.body === 'string') body = it.body;
+                  else if (it.description && typeof it.description === 'string') body = it.description;
+                  else if (it.raw && typeof it.raw === 'object') body = JSON.stringify(it.raw);
+                  else if (it.body && typeof it.body === 'object') body = JSON.stringify(it.body);
+                  else body = JSON.stringify(it);
+                }
+
+                // If body looks like a JSON-encoded string, try to parse and extract `raw` or `notam` fields
+                const trimmed = (typeof body === 'string') ? body.trim() : '';
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                  try {
+                    const parsedInner = JSON.parse(trimmed);
+                    if (parsedInner && typeof parsedInner === 'object') {
+                      if (parsedInner.raw && typeof parsedInner.raw === 'string') {
+                        body = parsedInner.raw;
+                      } else if (parsedInner.notam && typeof parsedInner.notam === 'string') {
+                        body = parsedInner.notam;
+                      } else if (parsedInner.text && typeof parsedInner.text === 'string') {
+                        body = parsedInner.text;
+                      } else {
+                        // keep stringified form as a fallback
+                        body = JSON.stringify(parsedInner, null, 2);
+                      }
+                    }
+                  } catch (e) {
+                    // not JSON after all - keep the original string
+                  }
+                }
+
                 const number = it.id || it.notamId || it.number || '';
                 const validFrom = it.start || it.begin || it.validFrom || '';
                 const validTo = it.end || it.finish || it.validTo || '';
@@ -162,7 +213,22 @@ export default async function handler(req, res) {
               });
             } else {
               // navData was not JSON — use raw text fallback: try to find blocks separated by double newlines
-              const chunks = rawText.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+              // First, try to see if rawText itself is a JSON string that includes a `raw` key
+              let processedRaw = rawText;
+              try {
+                const maybe = JSON.parse(rawText);
+                if (maybe && typeof maybe === 'object') {
+                  if (maybe.raw && typeof maybe.raw === 'string') {
+                    processedRaw = maybe.raw;
+                  } else {
+                    processedRaw = JSON.stringify(maybe);
+                  }
+                }
+              } catch (e) {
+                // not JSON - leave processedRaw as the raw response text
+              }
+
+              const chunks = processedRaw.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
               if (chunks.length > 0) {
                 chunks.forEach((chunk, idx) => {
                   parsed.push({
@@ -180,9 +246,9 @@ export default async function handler(req, res) {
                 });
               }
             }
+          } catch (navErr) {
+            console.error(`[API] Error fetching NAV CANADA CFPS for ${upicao}:`, navErr);
           }
-        } catch (navErr) {
-          console.error(`[API] Error fetching NAV CANADA CFPS for ${upicao}:`, navErr);
         }
       } else {
         console.log(`[API] FAA returned no NOTAMs for ${upicao} and ICAO is not Canadian — returning empty list`);
