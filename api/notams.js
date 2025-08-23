@@ -1,8 +1,7 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: better normalization for NAV CANADA CFPS responses so raw NOTAM text is returned
-// - prefer `raw` / `notam` / `text` fields when present
-// - attempt to parse JSON-wrapped strings like '{"raw":"(...)"}'
-// - ensure `body` is always a plain string (no object wrapper)
+// - Require FAA credentials only for non-Canadian ICAOs
+// - If FAA credentials are missing and ICAO starts with 'C', skip FAA and use NAV CANADA fallback
+// - Preserve existing normalization and fallback logic
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -26,63 +25,81 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid ICAO code' });
   }
 
+  const upicao = icao.toUpperCase();
   const CLIENT_ID = process.env.REACT_APP_FAA_CLIENT_ID;
   const CLIENT_SECRET = process.env.REACT_APP_FAA_API_KEY;
 
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    console.error('Missing FAA API credentials');
+  // Require FAA credentials only for non-Canadian ICAOs
+  if ((!CLIENT_ID || !CLIENT_SECRET) && upicao[0] !== 'C') {
+    console.error('Missing FAA API credentials for non-Canadian ICAO requests');
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
   try {
-    const upicao = icao.toUpperCase();
-    const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?icaoLocation=${upicao}&responseFormat=geoJson&pageSize=1000`;
-    
-    console.log(`[API] Fetching NOTAMs for ${upicao} from FAA: ${faaUrl}`);
-
-    const faaResp = await fetch(faaUrl, {
-      headers: {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'Accept': 'application/json'
-      },
-      timeout: 10000
-    });
-
-    if (!faaResp.ok) {
-      console.error(`[API] FAA API returned ${faaResp.status}: ${faaResp.statusText}`);
-      if (faaResp.status === 429) {
-        return res.status(429).json({ error: 'Rate limit exceeded' });
-      }
-      // For server 5xx/4xx, continue to attempt fallback for Canadian ICAOs only
-      if (!(upicao[0] === 'C')) {
-        return res.status(faaResp.status).json({ error: `FAA API error: ${faaResp.status} ${faaResp.statusText}` });
-      }
-      console.warn(`[API] FAA failed but ICAO ${upicao} is Canadian — will attempt NAV CANADA CFPS fallback`);
-    }
-
-    let data = null;
-    try {
-      data = faaResp.ok ? await faaResp.json() : null;
-    } catch (e) {
-      console.warn('[API] Failed to parse FAA response as JSON, continuing to fallback if needed', e);
-      data = null;
-    }
-
-    const faaItems = data?.items || [];
-
-    // If FAA returned items, process them normally
     let parsed = [];
+
+    // Attempt FAA fetch only when credentials are available
+    let faaItems = [];
+    if (CLIENT_ID && CLIENT_SECRET) {
+      const faaUrl = `https://external-api.faa.gov/notamapi/v1/notams?icaoLocation=${upicao}&responseFormat=geoJson&pageSize=1000`;
+      console.log(`[API] Fetching NOTAMs for ${upicao} from FAA: ${faaUrl}`);
+
+      try {
+        const faaResp = await fetch(faaUrl, {
+          headers: {
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET,
+            'Accept': 'application/json'
+          },
+          timeout: 10000
+        });
+
+        if (!faaResp.ok) {
+          console.error(`[API] FAA API returned ${faaResp.status}: ${faaResp.statusText}`);
+          if (faaResp.status === 429) {
+            return res.status(429).json({ error: 'Rate limit exceeded' });
+          }
+          // If FAA failed but ICAO is Canadian, we'll fall back later to NAV CANADA
+          if (upicao[0] !== 'C') {
+            return res.status(faaResp.status).json({ error: `FAA API error: ${faaResp.status} ${faaResp.statusText}` });
+          }
+          console.warn(`[API] FAA failed for ${upicao} — will attempt NAV CANADA fallback`);
+        } else {
+          // parse FAA JSON safely
+          try {
+            const data = await faaResp.json();
+            faaItems = data?.items || [];
+          } catch (err) {
+            console.warn('[API] Failed to parse FAA response as JSON:', err);
+            faaItems = [];
+          }
+        }
+      } catch (err) {
+        console.error('[API] Error fetching FAA API:', err);
+        if (upicao[0] !== 'C') {
+          return res.status(502).json({ error: 'Failed to reach FAA API' });
+        }
+        // else fall through to NAV CANADA
+      }
+    } else {
+      // No FAA credentials
+      if (upicao[0] === 'C') {
+        console.warn(`[API] FAA credentials missing. Skipping FAA for Canadian ICAO ${upicao} and using NAV CANADA fallback`);
+      } else {
+        // already handled above, but guard here as well
+        console.error('Missing FAA API credentials for non-Canadian ICAO requests');
+        return res.status(500).json({ error: 'Server configuration error' });
+      }
+    }
+
+    // If FAA provided items, normalize them
     if (faaItems.length > 0) {
       console.log(`[API] Received ${faaItems.length} items from FAA API`);
       parsed = faaItems.map(item => {
         const core = item.properties?.coreNOTAMData?.notam || {};
         const translation = (item.properties?.coreNOTAMData?.notamTranslation || [])[0] || {};
         const icaoLocation = core.icaoLocation || core.location || upicao;
-        
-        // prefer formatted text from translation, fallback to core text
         const rawBody = translation.formattedText || translation.simpleText || core.text || '';
-
         return {
           number: core.number || '',
           type: core.type || '',
@@ -97,11 +114,11 @@ export default async function handler(req, res) {
         };
       });
     } else {
-      // FAA returned no items (or parsing failed). If Canadian ICAO, attempt NAV CANADA CFPS fallback.
+      // FAA returned no items or we skipped FAA — if Canadian ICAO, try NAV CANADA CFPS fallback
       if (upicao[0] === 'C') {
         try {
           const navUrl = `https://plan.navcanada.ca/weather/api/alpha/?site=${upicao}&alpha=notam`;
-          console.log(`[API] FAA returned no NOTAMs for ${upicao}. Fetching NAV CANADA CFPS: ${navUrl}`);
+          console.log(`[API] Fetching NAV CANADA CFPS for ${upicao}: ${navUrl}`);
 
           const navResp = await fetch(navUrl, {
             headers: { 'Accept': 'application/json, text/plain, */*' },
@@ -111,30 +128,18 @@ export default async function handler(req, res) {
           if (!navResp.ok) {
             console.warn(`[API] NAV CANADA returned ${navResp.status}: ${navResp.statusText}`);
           } else {
-            // Try to parse JSON; some endpoints may respond with JSON directly or with text that contains JSON
             let navData = null;
             const rawText = await navResp.text();
 
-            // If response is a JSON string that contains the object with `raw`, extract it first
-            let maybeJson = null;
             try {
-              maybeJson = JSON.parse(rawText);
-            } catch (e) {
-              // not JSON - keep rawText as-is
-            }
-
-            if (maybeJson) {
-              navData = maybeJson;
-            } else {
-              // If it's not JSON we will try to detect JSON-like blobs inside (best-effort)
+              navData = JSON.parse(rawText);
+            } catch {
               navData = null;
             }
 
             const navItems = [];
 
             if (navData) {
-              // Attempt to normalize common shapes
-              // Possible shapes: array of objects, { notam: [...] }, { Alpha: [...] }, etc.
               if (Array.isArray(navData)) {
                 navData.forEach(it => navItems.push(it));
               } else if (navData.notam && Array.isArray(navData.notam)) {
@@ -142,25 +147,19 @@ export default async function handler(req, res) {
               } else if (navData.Alpha && Array.isArray(navData.Alpha)) {
                 navData.Alpha.forEach(it => navItems.push(it));
               } else {
-                // attempt to find array values in object
                 const arrays = Object.values(navData).filter(v => Array.isArray(v) && v.length > 0);
                 if (arrays.length > 0) {
                   arrays[0].forEach(it => navItems.push(it));
                 } else {
-                  // last resort: treat the object itself as one item
                   navItems.push(navData);
                 }
               }
 
               navItems.forEach(it => {
-                // Robustly extract a textual body from many possible shapes
                 let body = '';
-
-                // If the item is already a string, use it
                 if (typeof it === 'string') {
                   body = it;
                 } else {
-                  // common fields
                   if (it.raw && typeof it.raw === 'string') body = it.raw;
                   else if (it.notam && typeof it.notam === 'string') body = it.notam;
                   else if (it.text && typeof it.text === 'string') body = it.text;
@@ -171,7 +170,6 @@ export default async function handler(req, res) {
                   else body = JSON.stringify(it);
                 }
 
-                // If body looks like a JSON-encoded string, try to parse and extract `raw` or `notam` fields
                 const trimmed = (typeof body === 'string') ? body.trim() : '';
                 if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
                   try {
@@ -184,12 +182,11 @@ export default async function handler(req, res) {
                       } else if (parsedInner.text && typeof parsedInner.text === 'string') {
                         body = parsedInner.text;
                       } else {
-                        // keep stringified form as a fallback
                         body = JSON.stringify(parsedInner, null, 2);
                       }
                     }
-                  } catch (e) {
-                    // not JSON after all - keep the original string
+                  } catch {
+                    // keep original string
                   }
                 }
 
@@ -212,8 +209,6 @@ export default async function handler(req, res) {
                 });
               });
             } else {
-              // navData was not JSON — use raw text fallback: try to find blocks separated by double newlines
-              // First, try to see if rawText itself is a JSON string that includes a `raw` key
               let processedRaw = rawText;
               try {
                 const maybe = JSON.parse(rawText);
@@ -224,8 +219,8 @@ export default async function handler(req, res) {
                     processedRaw = JSON.stringify(maybe);
                   }
                 }
-              } catch (e) {
-                // not JSON - leave processedRaw as the raw response text
+              } catch {
+                // not JSON - leave as-is
               }
 
               const chunks = processedRaw.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
@@ -246,9 +241,9 @@ export default async function handler(req, res) {
                 });
               }
             }
-          } catch (navErr) {
-            console.error(`[API] Error fetching NAV CANADA CFPS for ${upicao}:`, navErr);
           }
+        } catch (navErr) {
+          console.error(`[API] Error fetching NAV CANADA CFPS for ${upicao}:`, navErr);
         }
       } else {
         console.log(`[API] FAA returned no NOTAMs for ${upicao} and ICAO is not Canadian — returning empty list`);
@@ -276,19 +271,13 @@ export default async function handler(req, res) {
       const isRscB = /rsc/i.test(b.summary || '');
       const isCrfiB = /crfi/i.test(b.summary || '');
 
-      // Priority 1: Runway closure
       if (isClosureA && !isClosureB) return -1;
       if (!isClosureA && isClosureB) return 1;
-
-      // Priority 2: RSC
       if (isRscA && !isRscB) return -1;
       if (!isRscA && isRscB) return 1;
-
-      // Priority 3: CRFI
       if (isCrfiA && !isCrfiB) return -1;
       if (!isCrfiA && isCrfiB) return 1;
 
-      // Then, most recent validFrom first
       try {
         return new Date(b.validFrom || 0) - new Date(a.validFrom || 0);
       } catch {
@@ -296,26 +285,23 @@ export default async function handler(req, res) {
       }
     });
 
-    // Limit to 50 NOTAMs
     parsed = parsed.slice(0, 50);
 
     console.log(`[API] Sending ${parsed.length} processed NOTAMs for ${upicao}`);
-    
-    // Set cache headers
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600'); // 5 min cache, 10 min stale
-    
+
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
     return res.status(200).json(parsed);
 
   } catch (error) {
     console.error(`[API] Error fetching NOTAMs for ${req.query.icao}:`, error);
-    
+
     if (error.name === 'AbortError' || error.message.includes('timeout')) {
       return res.status(504).json({ error: 'Request timeout' });
     }
-    
-    return res.status(500).json({ 
-      error: 'Failed to fetch NOTAMs', 
-      details: error.message 
+
+    return res.status(500).json({
+      error: 'Failed to fetch NOTAMs',
+      details: error.message
     });
   }
 }
