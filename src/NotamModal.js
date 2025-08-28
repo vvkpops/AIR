@@ -13,24 +13,30 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       }
     };
 
+    let scrollY = 0;
+
     if (isOpen) {
-      // Store current scroll position before applying modal-open
-      scrollPositionRef.current = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      // Store current scroll position
+      scrollY = window.scrollY;
+      scrollPositionRef.current = scrollY;
       
+      // Add event listener
       document.addEventListener('mousedown', handleClickOutside);
-      document.body.classList.add('modal-open');
       
-      // Apply the stored scroll position to the fixed body
-      document.body.style.top = `-${scrollPositionRef.current}px`;
+      // Prevent body scroll and maintain position
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflowY = 'scroll'; // Keep scrollbar to prevent layout shift
     } else {
-      // Clean up when modal closes
-      document.body.classList.remove('modal-open');
+      // Restore body styles
+      document.body.style.position = '';
       document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflowY = '';
       
-      // Restore scroll position with a small delay to ensure DOM is ready
-      requestAnimationFrame(() => {
-        window.scrollTo(0, scrollPositionRef.current);
-      });
+      // Restore scroll position
+      window.scrollTo(0, scrollPositionRef.current);
     }
 
     return () => {
@@ -56,7 +62,62 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
 
   if (!isOpen) return null;
 
-  // Helper function to format dates
+  // Helper function to clean up NOTAM text for display
+  const cleanNotamText = (rawText) => {
+    if (!rawText || typeof rawText !== 'string') return rawText;
+    
+    // If this looks like raw JSON CFPS response, extract the actual NOTAM text
+    if (rawText.includes('{"raw"') || rawText.startsWith('{')) {
+      try {
+        const jsonData = JSON.parse(rawText);
+        if (jsonData.raw) {
+          rawText = jsonData.raw;
+        }
+      } catch (e) {
+        // Not JSON, continue with original text
+      }
+    }
+    
+    // Find NOTAM blocks that start with NOTAM identifier and end after E) section
+    const notamBlocks = [];
+    const lines = rawText.split('\n');
+    let currentBlock = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check if this line starts a new NOTAM (contains NOTAM identifier pattern)
+      if (line.match(/^\(?[A-Z]\d+\/\d+\s+NOTAM/) || line.includes('NOTAM')) {
+        // Save previous block if it exists
+        if (currentBlock.length > 0) {
+          notamBlocks.push(currentBlock.join('\n'));
+        }
+        // Start new block
+        currentBlock = [line];
+      } else if (currentBlock.length > 0) {
+        // Add line to current block
+        currentBlock.push(line);
+        
+        // Check if this is the end of E) section
+        if (line.match(/^E\)/)) {
+          // Look ahead to see if next line is empty or starts a new NOTAM
+          if (i + 1 >= lines.length || lines[i + 1].trim() === '' || lines[i + 1].match(/^\(?[A-Z]\d+\/\d+\s+NOTAM/)) {
+            // End current block here
+            notamBlocks.push(currentBlock.join('\n'));
+            currentBlock = [];
+          }
+        }
+      }
+    }
+    
+    // Don't forget the last block
+    if (currentBlock.length > 0) {
+      notamBlocks.push(currentBlock.join('\n'));
+    }
+    
+    // Return the first clean NOTAM block if found, otherwise return original
+    return notamBlocks.length > 0 ? notamBlocks[0] : rawText;
+  };
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not specified';
     try {
