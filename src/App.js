@@ -1,9 +1,9 @@
-// (full file, updated handleNotamClick to stop propagation and delay fetch)
+// Complete App.js with draggable weather cards like iPhone icons
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 
-// Weather utilities
+// Weather utilities (unchanged)
 const TAF_CACHE_MS = 600000; // 10 minutes
 const METAR_CACHE_MS = 60000; // 1 minute
 
@@ -104,14 +104,13 @@ function highlightTAFAllBelow(raw, minC, minV) {
   }).join("");
 }
 
-// NOTAM parsing utilities
+// NOTAM parsing utilities (unchanged)
 const parseNotamText = (notamText) => {
   if (!notamText) return null;
   
   const lines = notamText.split('\n').map(line => line.trim()).filter(line => line);
   if (lines.length === 0) return null;
   
-  // Extract NOTAM components
   const notamObj = {
     id: '',
     qLine: '',
@@ -138,21 +137,16 @@ const parseNotamText = (notamText) => {
     isPermanent: false
   };
   
-  // Parse each line
   lines.forEach(line => {
     const upperLine = line.toUpperCase();
     
-    // Extract NOTAM ID from first line
     if (!notamObj.id && line.match(/^\w+\s+NOTAM/i)) {
       const idMatch = line.match(/^(\w+)/);
       if (idMatch) notamObj.id = idMatch[1];
     }
     
-    // Q Line - Qualifier Line (most important)
     if (upperLine.startsWith('Q)')) {
       notamObj.qLine = line;
-      
-      // Parse Q line components: Q)ICAO/QCODE/TRAFFIC/PURPOSE/SCOPE/LOWER/UPPER/COORDINATES/RADIUS
       const qParts = line.substring(2).split('/');
       if (qParts.length >= 8) {
         notamObj.classification = qParts[1] || '';
@@ -165,48 +159,40 @@ const parseNotamText = (notamText) => {
       }
     }
     
-    // A Line - Location
     else if (upperLine.startsWith('A)')) {
       notamObj.aLine = line.substring(2).trim();
     }
     
-    // B Line - Valid From
     else if (upperLine.startsWith('B)')) {
       notamObj.bLine = line.substring(2).trim();
       notamObj.validFrom = parseNotamDateTime(notamObj.bLine);
     }
     
-    // C Line - Valid To
     else if (upperLine.startsWith('C)')) {
       notamObj.cLine = line.substring(2).trim();
       notamObj.validTo = parseNotamDateTime(notamObj.cLine);
       notamObj.isPermanent = notamObj.cLine.includes('PERM');
     }
     
-    // D Line - Schedule
     else if (upperLine.startsWith('D)')) {
       notamObj.dLine = line.substring(2).trim();
       notamObj.schedule = notamObj.dLine;
     }
     
-    // E Line - Description (most important for users)
     else if (upperLine.startsWith('E)')) {
       notamObj.eLine = line.substring(2).trim();
       notamObj.description = notamObj.eLine;
     }
     
-    // F Line - Lower Limit
     else if (upperLine.startsWith('F)')) {
       notamObj.fLine = line.substring(2).trim();
     }
     
-    // G Line - Upper Limit
     else if (upperLine.startsWith('G)')) {
       notamObj.gLine = line.substring(2).trim();
     }
   });
   
-  // Determine if temporary
   notamObj.isTemporary = !notamObj.isPermanent && (notamObj.validTo || notamObj.schedule);
   
   return notamObj;
@@ -215,12 +201,11 @@ const parseNotamText = (notamText) => {
 const parseNotamDateTime = (dateTimeStr) => {
   if (!dateTimeStr || dateTimeStr.includes('PERM')) return null;
   
-  // NOTAM date format is typically YYMMDDHHMM
   const match = dateTimeStr.match(/(\d{10})/);
   if (match) {
     const dt = match[1];
     const year = 2000 + parseInt(dt.substring(0, 2));
-    const month = parseInt(dt.substring(2, 4)) - 1; // JS months are 0-indexed
+    const month = parseInt(dt.substring(2, 4)) - 1;
     const day = parseInt(dt.substring(4, 6));
     const hour = parseInt(dt.substring(6, 8));
     const minute = parseInt(dt.substring(8, 10));
@@ -231,7 +216,7 @@ const parseNotamDateTime = (dateTimeStr) => {
   return null;
 };
 
-// Header Component
+// Header Component (unchanged)
 const Header = () => {
   const [localTime, setLocalTime] = useState('');
   const [utcTime, setUtcTime] = useState('');
@@ -267,7 +252,7 @@ const Header = () => {
   );
 };
 
-// Simple NOTAM Modal using portal, just raw NOTAM stacked
+// Simple NOTAM Modal (unchanged)
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
   useEffect(() => {
@@ -294,11 +279,9 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   }, [isOpen, onClose]);
   if (!isOpen) return null;
 
-  // Main modal content (just raw NOTAMs!)
   return ReactDOM.createPortal(
     <div className="modal-overlay modal-backdrop-blur modal-animate">
       <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600">
-        {/* Modal Header */}
         <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
           <div>
             <h3 className="text-xl font-bold text-cyan-400">Raw NOTAMs for {icao}</h3>
@@ -311,7 +294,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
             ×
           </button>
         </div>
-        {/* Modal Body */}
         <div className="modal-body-scrollable p-6">
           {loading ? (
             <div className="text-center py-16">
@@ -354,7 +336,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     document.getElementById('modal-root')
   );
 };
-// Weather Tile Component with Backend API Integration
+
+// Updated Weather Tile Component with draggable functionality
 const WeatherTile = ({ 
   icao, 
   weatherMinima, 
@@ -362,7 +345,11 @@ const WeatherTile = ({
   setWeatherMinima, 
   resetWeatherMinima, 
   removeWeatherICAO,
-  globalMinimized = false
+  globalMinimized = false,
+  onDragStart,
+  onDragEnd,
+  draggedItem,
+  onReorder
 }) => {
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
@@ -371,6 +358,14 @@ const WeatherTile = ({
   const [notamData, setNotamData] = useState([]);
   const [notamLoading, setNotamLoading] = useState(false);
   const [notamError, setNotamError] = useState(null);
+
+  // Drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null);
+  const longPressTimer = useRef(null);
+  const [isLongPressed, setIsLongPressed] = useState(false);
 
   const storageKey = `weatherTileMin_${icao}`;
   const [minimized, setMinimized] = useState(() => {
@@ -385,6 +380,7 @@ const WeatherTile = ({
   const min = weatherMinima[icao] || globalWeatherMinima;
   const usingDefault = !weatherMinima[icao];
 
+  // Weather data fetching (unchanged)
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -404,28 +400,139 @@ const WeatherTile = ({
     };
     
     fetchData();
-    
     const intervalId = setInterval(fetchData, 300000);
-    
     return () => clearInterval(intervalId);
   }, [icao, min.ceiling, min.vis]);
 
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, minimized ? '1' : '0');
-    } catch (e) {
-      // ignore storage errors
-    }
+    } catch (e) {}
   }, [minimized, storageKey]);
 
+  // Drag event handlers
+  const handleDragStart = (e, isTouch = false) => {
+    if (!isLongPressed && isTouch) return; // Only allow touch drag after long press
+
+    e.preventDefault();
+    
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+    
+    const rect = dragRef.current.getBoundingClientRect();
+    const offset = {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+    
+    setDragOffset(offset);
+    setDragPosition({ x: clientX - offset.x, y: clientY - offset.y });
+    setIsDragging(true);
+    onDragStart(icao);
+  };
+
+  const handleDragMove = (e, isTouch = false) => {
+    if (!isDragging) return;
+    
+    e.preventDefault();
+    
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+    
+    setDragPosition({
+      x: clientX - dragOffset.x,
+      y: clientY - dragOffset.y
+    });
+
+    // Find the element we're hovering over
+    const elementBelow = document.elementFromPoint(clientX, clientY);
+    const tileBelow = elementBelow?.closest('[data-icao]');
+    
+    if (tileBelow && tileBelow.dataset.icao !== icao) {
+      onReorder(icao, tileBelow.dataset.icao);
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (!isDragging) return;
+    
+    setIsDragging(false);
+    setIsLongPressed(false);
+    setDragPosition({ x: 0, y: 0 });
+    onDragEnd();
+  };
+
+  // Long press handling for touch devices
+  const handleTouchStart = (e) => {
+    longPressTimer.current = setTimeout(() => {
+      setIsLongPressed(true);
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms long press
+  };
+
+  const handleTouchEnd = (e) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+    if (!isDragging) {
+      setIsLongPressed(false);
+    } else {
+      handleDragEnd();
+    }
+  };
+
+  // Mouse event handlers
+  const handleMouseDown = (e) => {
+    handleDragStart(e, false);
+  };
+
+  const handleMouseMove = (e) => {
+    handleDragMove(e, false);
+  };
+
+  const handleMouseUp = () => {
+    handleDragEnd();
+  };
+
+  // Touch event handlers
+  const handleTouchMove = (e) => {
+    if (isLongPressed) {
+      if (!isDragging) {
+        handleDragStart(e, true);
+      } else {
+        handleDragMove(e, true);
+      }
+    }
+  };
+
+  // Add global event listeners
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  }, [isDragging, isLongPressed, dragOffset]);
+
   const toggleMinimize = () => setMinimized(prev => !prev);
-// Fixed NOTAM fetch function using backend API
+
+  // NOTAM handling (unchanged)
   const fetchNotamData = async () => {
     setNotamLoading(true);
     setNotamError(null);
     
     try {
-      // Use the backend API endpoint instead of direct FAA API call
       const response = await fetch(`/api/notams?icao=${icao}`);
       
       if (!response.ok) {
@@ -446,19 +553,14 @@ const WeatherTile = ({
         throw new Error(data.error);
       }
       
-      console.log('Backend API Response:', data); // Debug log
-      
-      // Process the NOTAM data from backend API
       const parsedNotams = [];
       
       if (Array.isArray(data)) {
         data.forEach(item => {
-          // The backend already processes NOTAMs, so we can use them directly
           const notamText = item.body || item.summary || '';
           const parsed = parseNotamText(notamText);
           
           if (parsed) {
-            // Merge backend data with parsed data
             parsed.number = item.number || parsed.number;
             parsed.icao = icao;
             parsed.classification = item.classification || parsed.classification;
@@ -471,7 +573,6 @@ const WeatherTile = ({
             parsed.source = 'Backend API (FAA Official)';
             parsedNotams.push(parsed);
           } else {
-            // If parsing fails, create a simple NOTAM object from backend data
             parsedNotams.push({
               id: item.number || `${icao}-${Date.now()}`,
               number: item.number || '',
@@ -506,16 +607,14 @@ const WeatherTile = ({
     }
   };
 
-  // Updated: stop propagation on the click that opens the modal to avoid the outside-click listener closing it immediately
   const handleNotamClick = (e) => {
-    // prevent the opening click from bubbling to document-level handlers which can immediately close the modal
+    if (isDragging || isLongPressed) return;
+    
     if (e && typeof e.stopPropagation === 'function') {
       e.stopPropagation();
       e.preventDefault();
     }
     setNotamModalOpen(true);
-
-    // Defer fetch slightly to avoid any race with mounting listeners (safe and cheap)
     setTimeout(() => {
       fetchNotamData();
     }, 0);
@@ -535,142 +634,181 @@ const WeatherTile = ({
     return "border-green-500";
   };
 
+  const dragStyle = isDragging ? {
+    position: 'fixed',
+    left: dragPosition.x,
+    top: dragPosition.y,
+    zIndex: 1000,
+    transform: 'rotate(5deg) scale(1.05)',
+    transition: 'none',
+    pointerEvents: 'none',
+    opacity: 0.9
+  } : {};
+
+  const baseStyle = isDragging ? { opacity: 0.3 } : {};
+
   return (
-    <div 
-      className={`relative bg-gray-800 rounded-xl shadow-md p-4 border-2 transition-all duration-300 hover:scale-105 ${getBorderClass()}`}
-      style={effectiveMinimized ? { paddingTop: 8, paddingBottom: 8 } : undefined}
-      aria-live="polite"
-    >
-      {/* Remove button */}
-      <button 
-        onClick={() => removeWeatherICAO(icao)} 
-        type="button" 
-        className="absolute top-2 right-2 z-10 bg-gray-900 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white transition-all"
-        title={`Remove ${icao}`}
-        aria-label={`Remove ${icao}`}
+    <>
+      {/* Original tile (hidden during drag) */}
+      <div 
+        ref={dragRef}
+        data-icao={icao}
+        className={`relative bg-gray-800 rounded-xl shadow-md p-4 border-2 transition-all duration-300 select-none
+          ${isDragging ? '' : 'hover:scale-105'} 
+          ${getBorderClass()}
+          ${isLongPressed && !isDragging ? 'animate-pulse scale-105' : ''}
+          ${draggedItem === icao && !isDragging ? 'opacity-50' : ''}`}
+        style={{ 
+          ...baseStyle,
+          ...(effectiveMinimized ? { paddingTop: 8, paddingBottom: 8 } : undefined)
+        }}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        aria-live="polite"
       >
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 20 20">
-          <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
-        </svg>
-      </button>
-
-      {/* Minimize toggle */}
-      <button
-        onClick={globalMinimized ? undefined : toggleMinimize}
-        type="button"
-        title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
-        aria-pressed={effectiveMinimized}
-        aria-label={globalMinimized ? `Global minimize active` : `${minimized ? 'Expand' : 'Collapse'} ${icao} weather`}
-        disabled={globalMinimized}
-        className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gray-600' : 'bg-gray-800'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow border-2 border-gray-600`}
-        style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
-      >
-        {effectiveMinimized ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-
-      {/* Title */}
-      <div className="text-2xl font-bold text-center text-cyan-300 tracking-wider">{icao}</div>
-
-      {/* Minima controls */}
-      <div className="flex gap-3 items-center mt-2 text-xs">
-        <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
-          Ceil: 
-          <input 
-            type="number" 
-            value={min.ceiling}
-            className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
-            onChange={(e) => setWeatherMinima(icao, 'ceiling', e.target.value)}
-            aria-label={`${icao} ceiling minima`}
-          />
-        </label>
-        <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
-          Vis: 
-          <input 
-            type="number" 
-            step="0.1" 
-            value={min.vis}
-            className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
-            onChange={(e) => setWeatherMinima(icao, 'vis', e.target.value)}
-            aria-label={`${icao} visibility minima`}
-          />
-        </label>
-        {usingDefault ? 
-          <span className="opacity-70 italic text-gray-400">(default)</span> : 
-          <button 
-            className="text-yellow-400 underline text-xs hover:text-yellow-200" 
-            onClick={() => resetWeatherMinima(icao)}
-            aria-label={`Reset ${icao} minima`}
-          >
-            reset
-          </button>
-        }
-      </div>
-
-      {/* NOTAM Button - subtle positioning */}
-      <div className="mt-2 flex justify-end">
-        <button
-          onClick={handleNotamClick}
-          className="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-2 py-1 rounded text-xs font-medium transition-colors border border-gray-600 hover:border-gray-500"
-          title={`View NOTAMs for ${icao}`}
+        {/* Remove button */}
+        <button 
+          onClick={() => removeWeatherICAO(icao)} 
+          type="button" 
+          className="absolute top-2 right-2 z-10 bg-gray-900 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white transition-all"
+          title={`Remove ${icao}`}
+          aria-label={`Remove ${icao}`}
         >
-          NOTAMs
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 20 20">
+            <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
+          </svg>
         </button>
+
+        {/* Minimize toggle */}
+        <button
+          onClick={globalMinimized ? undefined : toggleMinimize}
+          type="button"
+          title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
+          aria-pressed={effectiveMinimized}
+          aria-label={globalMinimized ? `Global minimize active` : `${minimized ? 'Expand' : 'Collapse'} ${icao} weather`}
+          disabled={globalMinimized}
+          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gray-600' : 'bg-gray-800'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow border-2 border-gray-600`}
+          style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
+        >
+          {effectiveMinimized ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+
+        {/* Title */}
+        <div className="text-2xl font-bold text-center text-cyan-300 tracking-wider">{icao}</div>
+
+        {/* Minima controls */}
+        <div className="flex gap-3 items-center mt-2 text-xs">
+          <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
+            Ceil: 
+            <input 
+              type="number" 
+              value={min.ceiling}
+              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
+              onChange={(e) => setWeatherMinima(icao, 'ceiling', e.target.value)}
+              aria-label={`${icao} ceiling minima`}
+            />
+          </label>
+          <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
+            Vis: 
+            <input 
+              type="number" 
+              step="0.1" 
+              value={min.vis}
+              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
+              onChange={(e) => setWeatherMinima(icao, 'vis', e.target.value)}
+              aria-label={`${icao} visibility minima`}
+            />
+          </label>
+          {usingDefault ? 
+            <span className="opacity-70 italic text-gray-400">(default)</span> : 
+            <button 
+              className="text-yellow-400 underline text-xs hover:text-yellow-200" 
+              onClick={() => resetWeatherMinima(icao)}
+              aria-label={`Reset ${icao} minima`}
+            >
+              reset
+            </button>
+          }
+        </div>
+
+        {/* NOTAM Button - subtle positioning */}
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={handleNotamClick}
+            className="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-2 py-1 rounded text-xs font-medium transition-colors border border-gray-600 hover:border-gray-500"
+            title={`View NOTAMs for ${icao}`}
+          >
+            NOTAMs
+          </button>
+        </div>
+
+        {/* Weather content */}
+        {effectiveMinimized ? (
+          <div className="mt-2 text-sm text-gray-300 flex items-center justify-center">
+            <span className="px-2 py-1 bg-gray-900 rounded text-xs">
+              Weather minimized — {globalMinimized ? 'global' : 'local'} view
+            </span>
+          </div>
+        ) : (
+          <>
+            {loading && (
+              <div className="mt-2 text-center">
+                <div className="inline-block w-6 h-6 border-2 border-t-cyan-500 border-gray-600 rounded-full animate-spin"></div>
+                <p className="text-sm text-gray-400 mt-1">Loading weather data...</p>
+              </div>
+            )}
+            
+            {metarRaw && (
+              <div className="mt-2 text-xs text-gray-300">
+                <strong className="text-cyan-400">METAR:</strong> 
+                <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300">{metarRaw}</div>
+              </div>
+            )}
+            
+            {tafHtml && (
+              <div className="mt-2 text-xs">
+                <strong className="text-cyan-400">TAF:</strong>
+                <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300" dangerouslySetInnerHTML={{ __html: tafHtml }}></div>
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* NOTAM Modal */}
+        <NotamModal 
+          icao={icao}
+          isOpen={notamModalOpen}
+          onClose={handleCloseNotamModal}
+          notamData={notamData}
+          loading={notamLoading}
+          error={notamError}
+        />
       </div>
 
-      {/* Weather content */}
-      {effectiveMinimized ? (
-        <div className="mt-2 text-sm text-gray-300 flex items-center justify-center">
-          <span className="px-2 py-1 bg-gray-900 rounded text-xs">
-            Weather minimized — {globalMinimized ? 'global' : 'local'} view
-          </span>
+      {/* Dragging clone */}
+      {isDragging && (
+        <div 
+          className={`bg-gray-800 rounded-xl shadow-2xl p-4 border-2 ${getBorderClass()}`}
+          style={dragStyle}
+        >
+          <div className="text-2xl font-bold text-center text-cyan-300 tracking-wider">{icao}</div>
+          <div className="mt-2 text-center text-gray-400 text-sm">Dragging...</div>
         </div>
-      ) : (
-        <>
-          {loading && (
-            <div className="mt-2 text-center">
-              <div className="inline-block w-6 h-6 border-2 border-t-cyan-500 border-gray-600 rounded-full animate-spin"></div>
-              <p className="text-sm text-gray-400 mt-1">Loading weather data...</p>
-            </div>
-          )}
-          
-          {metarRaw && (
-            <div className="mt-2 text-xs text-gray-300">
-              <strong className="text-cyan-400">METAR:</strong> 
-              <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300">{metarRaw}</div>
-            </div>
-          )}
-          
-          {tafHtml && (
-            <div className="mt-2 text-xs">
-              <strong className="text-cyan-400">TAF:</strong>
-              <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300" dangerouslySetInnerHTML={{ __html: tafHtml }}></div>
-            </div>
-          )}
-        </>
       )}
-      
-      {/* NOTAM Modal */}
-      <NotamModal 
-        icao={icao}
-        isOpen={notamModalOpen}
-        onClose={handleCloseNotamModal}
-        notamData={notamData}
-        loading={notamLoading}
-        error={notamError}
-      />
-    </div>
+    </>
   );
 };
 
-// Main App Component
+// Main App Component with drag and drop functionality
 const WeatherMonitorApp = () => {
   // State variables
   const [globalWeatherMinima, setGlobalWeatherMinima] = useState(
@@ -695,6 +833,9 @@ const WeatherMonitorApp = () => {
       return false;
     }
   });
+
+  // Drag state
+  const [draggedItem, setDraggedItem] = useState(null);
   
   const icaoInputRef = useRef(null);
 
@@ -714,9 +855,7 @@ const WeatherMonitorApp = () => {
   useEffect(() => {
     try {
       localStorage.setItem("globalWeatherMinimized", JSON.stringify(globalWeatherMinimized));
-    } catch (e) {
-      // ignore storage errors
-    }
+    } catch (e) {}
   }, [globalWeatherMinimized]);
 
   // Handler functions
@@ -786,6 +925,36 @@ const WeatherMonitorApp = () => {
     setGlobalWeatherMinimized(prev => !prev);
   };
 
+  // Drag and drop handlers
+  const handleDragStart = (icao) => {
+    setDraggedItem(icao);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+  };
+
+  const handleReorder = (draggedIcao, targetIcao) => {
+    if (draggedIcao === targetIcao) return;
+    
+    setWeatherICAOs(prev => {
+      const newOrder = [...prev];
+      const draggedIndex = newOrder.indexOf(draggedIcao);
+      const targetIndex = newOrder.indexOf(targetIcao);
+      
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+      
+      // Remove dragged item
+      newOrder.splice(draggedIndex, 1);
+      
+      // Insert at target position
+      const newTargetIndex = newOrder.indexOf(targetIcao);
+      newOrder.splice(newTargetIndex, 0, draggedIcao);
+      
+      return newOrder;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
@@ -846,6 +1015,13 @@ const WeatherMonitorApp = () => {
             {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
           </button>
         </div>
+        
+        {/* Drag instruction */}
+        {weatherICAOs.length > 1 && (
+          <div className="text-center text-gray-400 text-sm mb-4">
+            💡 <strong>Desktop:</strong> Click and drag to reorder • <strong>Mobile:</strong> Long press then drag
+          </div>
+        )}
       </div>
       
       {/* Weather Tiles Grid */}
@@ -861,6 +1037,10 @@ const WeatherMonitorApp = () => {
               resetWeatherMinima={handleResetWeatherMinima}
               removeWeatherICAO={handleRemoveWeatherICAO}
               globalMinimized={globalWeatherMinimized}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onReorder={handleReorder}
+              draggedItem={draggedItem}
             />
           ))}
         </div>
