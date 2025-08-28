@@ -648,48 +648,62 @@ const WeatherTile = ({
     left: dragPosition.x,
     top: dragPosition.y,
     zIndex: 1000,
-    transform: 'rotate(5deg) scale(1.05)',
+    transform: 'rotate(8deg) scale(1.1)',
     transition: 'none',
     pointerEvents: 'none',
-    opacity: 0.9
+    opacity: 0.95,
+    filter: 'drop-shadow(0 25px 50px rgba(6, 182, 212, 0.4))',
+    animation: 'dragFloat 2s ease-in-out infinite'
   } : {};
 
-  const baseStyle = isDragging ? { opacity: 0.3 } : {};
+  const baseStyle = isDragging ? { 
+    opacity: 0.2,
+    transform: 'scale(0.95)',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+  } : {};
 
   return (
     <>
-      {/* Original tile (hidden during drag) */}
+      {/* Original tile (with enhanced animations) */}
       <div 
         ref={dragRef}
         data-icao={icao}
-        className={`relative bg-gray-800 rounded-xl shadow-md p-4 border-2 transition-all duration-300 select-none
-          ${isDragging ? '' : 'hover:scale-105'} 
+        className={`relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg p-4 border-2 select-none
+          ${isDragging ? '' : 'hover:scale-[1.02] hover:shadow-xl hover:shadow-cyan-500/10'} 
           ${getBorderClass()}
-          ${isLongPressed && !isDragging ? 'animate-pulse scale-105' : ''}
-          ${draggedItem === icao && !isDragging ? 'opacity-50' : ''}`}
+          ${isLongPressed && !isDragging ? 'animate-[wiggle_0.5s_ease-in-out_infinite] scale-[1.02] shadow-lg shadow-cyan-500/20' : ''}
+          ${draggedItem === icao && !isDragging ? 'opacity-50 scale-95' : ''}
+          transition-all duration-300 ease-out backdrop-blur-sm`}
         style={{ 
           ...baseStyle,
-          ...(effectiveMinimized ? { paddingTop: 8, paddingBottom: 8 } : undefined)
+          ...(effectiveMinimized ? { paddingTop: 8, paddingBottom: 8 } : undefined),
+          ...(isDragging ? {} : {
+            background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
+            backdropFilter: 'blur(10px)',
+            borderColor: loading ? 'rgb(75, 85, 99)' : 
+                        tafHtml && tafHtml.includes("text-red-400") ? 'rgb(239, 68, 68)' : 
+                        'rgb(34, 197, 94)'
+          })
         }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         aria-live="polite"
       >
-        {/* Remove button */}
+        {/* Enhanced Remove button with better animations */}
         <button 
           onClick={() => removeWeatherICAO(icao)} 
           type="button" 
-          className="absolute top-2 right-2 z-10 bg-gray-900 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white transition-all"
+          className="absolute top-2 right-2 z-20 bg-gradient-to-br from-gray-900 to-gray-800 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-gradient-to-br hover:from-red-600 hover:to-red-700 hover:text-white hover:scale-110 transition-all duration-200 shadow-lg hover:shadow-red-500/25 backdrop-blur-sm"
           title={`Remove ${icao}`}
           aria-label={`Remove ${icao}`}
         >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 20 20">
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 20 20" className="transition-transform duration-200 hover:rotate-90">
             <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
           </svg>
         </button>
 
-        {/* Minimize toggle */}
+        {/* Enhanced Minimize toggle with better styling */}
         <button
           onClick={globalMinimized ? undefined : toggleMinimize}
           type="button"
@@ -697,22 +711,16 @@ const WeatherTile = ({
           aria-pressed={effectiveMinimized}
           aria-label={globalMinimized ? `Global minimize active` : `${minimized ? 'Expand' : 'Collapse'} ${icao} weather`}
           disabled={globalMinimized}
-          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gray-600' : 'bg-gray-800'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow border-2 border-gray-600`}
+          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gradient-to-br from-gray-600 to-gray-700' : 'bg-gradient-to-br from-gray-800 to-gray-900'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-gray-600 hover:scale-105 transition-all duration-200 backdrop-blur-sm hover:shadow-cyan-500/25`}
           style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
         >
-          {effectiveMinimized ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${effectiveMinimized ? 'rotate-180' : ''}`}>
+            <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
 
-        {/* Title */}
-        <div className="text-2xl font-bold text-center text-cyan-300 tracking-wider">{icao}</div>
+        {/* Enhanced Title with gradient text */}
+        <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
 
         {/* Minima controls */}
         <div className="flex gap-3 items-center mt-2 text-xs">
@@ -749,14 +757,16 @@ const WeatherTile = ({
           }
         </div>
 
-        {/* NOTAM Button - subtle positioning */}
+        {/* Enhanced NOTAM Button with modern styling */}
         <div className="mt-2 flex justify-end">
           <button
             onClick={handleNotamClick}
-            className="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-2 py-1 rounded text-xs font-medium transition-colors border border-gray-600 hover:border-gray-500"
+            className="bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-600 hover:border-gray-500 shadow-sm hover:shadow-md hover:scale-105 backdrop-blur-sm"
             title={`View NOTAMs for ${icao}`}
           >
-            NOTAMs
+            <span className="flex items-center gap-1">
+              📋 NOTAMs
+            </span>
           </button>
         </div>
 
@@ -803,14 +813,21 @@ const WeatherTile = ({
         />
       </div>
 
-      {/* Dragging clone */}
+      {/* Enhanced dragging clone with premium effects */}
       {isDragging && (
         <div 
-          className={`bg-gray-800 rounded-xl shadow-2xl p-4 border-2 ${getBorderClass()}`}
-          style={dragStyle}
+          className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl p-4 border-2 border-cyan-400 backdrop-blur-md"
+          style={{
+            ...dragStyle,
+            background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
+          }}
         >
-          <div className="text-2xl font-bold text-center text-cyan-300 tracking-wider">{icao}</div>
-          <div className="mt-2 text-center text-gray-400 text-sm">Dragging...</div>
+          <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
+          <div className="mt-2 text-center text-cyan-400 text-sm font-medium animate-pulse flex items-center justify-center gap-2">
+            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+            Dragging...
+            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
         </div>
       )}
     </>
@@ -1046,22 +1063,23 @@ const WeatherMonitorApp = () => {
           </button>
         </div>
         
-        {/* Drag instruction */}
-        {weatherICAOs.length > 1 && (
-          <div className="text-center text-gray-400 text-sm mb-4">
-            💡 <strong>Desktop:</strong> Click and drag to reorder • <strong>Mobile:</strong> Long press then drag
-          </div>
-        )}
+        {/* Drag instruction - REMOVED */}
+        {/* Enhanced visual feedback replaces the need for instructions */}
       </div>
       
       {/* Weather Tiles Grid */}
       <div className="max-w-screen-2xl mx-auto px-6 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
           {weatherICAOs.map((icao, index) => (
-            <div key={`${icao}-container`} className="relative">
-              {/* Insertion space indicator before */}
+            <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
+              {/* Enhanced insertion space indicator before */}
               {shouldShowInsertionSpace(icao, 'before') && (
-                <div className="absolute -left-3 top-0 bottom-0 w-1 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
+                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+              )}
+              
+              {/* Drop zone overlay for better visual feedback */}
+              {draggedItem && icao !== draggedItem && (
+                <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/30 bg-cyan-400/5 opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
               )}
               
               <WeatherTile 
@@ -1078,9 +1096,9 @@ const WeatherMonitorApp = () => {
                 draggedItem={draggedItem}
               />
               
-              {/* Insertion space indicator after */}
+              {/* Enhanced insertion space indicator after */}
               {shouldShowInsertionSpace(icao, 'after') && (
-                <div className="absolute -right-3 top-0 bottom-0 w-1 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
+                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
               )}
             </div>
           ))}
