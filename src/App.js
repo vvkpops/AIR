@@ -1026,6 +1026,9 @@ const WeatherTile = ({
     // Use current color scheme for borders
     const currentColors = getCurrentColors();
     
+    // Check if TAF contains the current scheme's below-minima color class
+    const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+    
     // Also check METAR conditions for border coloring if METAR filter is enabled
     let metarBelowMinima = false;
     if (metarFilterEnabled && metarRaw) {
