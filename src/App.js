@@ -136,7 +136,10 @@ function parseLine(line) {
 }
 
 // Enhanced METAR highlighting function with color customization and filter toggle
+// Currently unused but kept for potential future enhancements
+// eslint-disable-next-line no-unused-vars
 function highlightMETARWithOptions(raw, minC, minV, filterEnabled, colorScheme) {
+  // eslint-disable-next-line no-unused-vars
   const colors = COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
   
   if (!raw || typeof raw !== 'string') {
@@ -1023,10 +1026,17 @@ const WeatherTile = ({
     // Use current color scheme for borders
     const currentColors = getCurrentColors();
     
-    // Check if TAF contains the current scheme's below-minima color class
-    const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+    // Also check METAR conditions for border coloring if METAR filter is enabled
+    let metarBelowMinima = false;
+    if (metarFilterEnabled && metarRaw) {
+      const p = parseLine(metarRaw);
+      const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
+      const ceilOk = p.ceiling >= min.ceiling;
+      metarBelowMinima = !(visOk && ceilOk);
+    }
     
-    if (hasBelowMinimaConditions) {
+    // Use below minima colors if either TAF or METAR (when enabled) are below minima  
+    if (hasBelowMinimaConditions || metarBelowMinima) {
       // Map text colors to appropriate border colors for BELOW minima
       switch (currentColors.belowMinima) {
         case 'text-red-400':
@@ -1121,7 +1131,17 @@ const WeatherTile = ({
               // Check if TAF contains the current scheme's below-minima color class
               const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
               
-              if (hasBelowMinimaConditions) {
+              // Also check METAR conditions if METAR filter is enabled
+              let metarBelowMinima = false;
+              if (metarFilterEnabled && metarRaw) {
+                const p = parseLine(metarRaw);
+                const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
+                const ceilOk = p.ceiling >= min.ceiling;
+                metarBelowMinima = !(visOk && ceilOk);
+              }
+              
+              // Use below minima colors if either TAF or METAR (when enabled) are below minima
+              if (hasBelowMinimaConditions || metarBelowMinima) {
                 // Below minima colors
                 switch (currentColors.belowMinima) {
                   case 'text-red-400':
@@ -1242,10 +1262,10 @@ const WeatherTile = ({
         </div>
 
         {/* Filter status indicator */}
-        {!minimaFilterEnabled && (
+        {!minimaFilterEnabled && !metarFilterEnabled && (
           <div className="mt-1 text-center">
             <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
-              Filter: OFF
+              Filters: OFF
             </span>
           </div>
         )}
