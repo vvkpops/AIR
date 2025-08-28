@@ -1,4 +1,319 @@
-// Complete App.js with draggable weather cards like iPhone icons
+useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, minimized ? '1' : '0');
+    } catch (e) {}
+  }, [minimized, storageKey]);
+
+  // Drag event handlers (unchanged)
+  const handleDragStart = (e, isTouch = false) => {
+    if (!isLongPressed && isTouch) return;
+
+    e.preventDefault();
+    
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+    
+    const rect = dragRef.current.getBoundingClientRect();
+    const offset = {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+    
+    setDragOffset(offset);
+    setDragPosition({ x: clientX - offset.x, y: clientY - offset.y });
+    setIsDragging(true);
+    onDragStart(icao);
+  };
+
+  const handleDragMove = (e, isTouch = false) => {
+    if (!isDragging) return;
+    
+    e.preventDefault();
+    
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+    
+    setDragPosition({
+      x: clientX - dragOffset.x,
+      y: clientY - dragOffset.y
+    });
+
+    // Find the element we're hovering over
+    const elementBelow = document.elementFromPoint(clientX, clientY);
+    const tileBelow = elementBelow?.closest('[data-icao]');
+    
+    if (tileBelow && tileBelow.dataset.icao !== icao) {
+      // Calculate if we should insert before or after the target
+      const rect = tileBelow.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      // For grid layout, consider both X and Y positions
+      const insertAfter = clientX > centerX || clientY > centerY;
+      
+      onReorder(icao, tileBelow.dataset.icao, insertAfter);
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (!isDragging) return;
+    
+    setIsDragging(false);
+    setIsLongPressed(false);
+    setDragPosition({ x: 0, y: 0 });
+    onDragEnd();
+  };
+
+  // Long press handling for touch devices
+  const handleTouchStart = (e) => {
+    longPressTimer.current = setTimeout(() => {
+      setIsLongPressed(true);
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms long press
+  };
+
+  const handleTouchEnd = (e) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+    if (!isDragging) {
+      setIsLongPressed(false);
+    } else {
+      handleDragEnd();
+    }
+  };
+
+  // Mouse event handlers
+  const handleMouseDown = (e) => {
+    handleDragStart(e, false);
+  };
+
+  const handleMouseMove = (e) => {
+    handleDragMove(e, false);
+  };
+
+  const handleMouseUp = () => {
+    handleDragEnd();
+  };
+
+  // Touch event handlers
+  const handleTouchMove = (e) => {
+    if (isLongPressed) {
+      if (!isDragging) {
+        handleDragStart(e, true);
+      } else {
+        handleDragMove(e, true);
+      }
+    }
+  };
+
+  // Add global event listeners
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging, isLongPressed, dragOffset]);
+
+  const toggleMinimize = () => setMinimized(prev => !prev);
+
+  // NOTAM handling (unchanged)
+  const fetchNotamData = async () => {
+    setNotamLoading(true);
+    setNotamError(null);
+    
+    try {
+      const response = await fetch(`/api/notams?icao=${icao}`);
+      
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        } else if (response.status === 400) {
+          throw new Error('Invalid ICAO code provided.');
+        } else if (response.status === 500) {
+          throw new Error('Server error occurred while fetching NOTAMs.');
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      const parsedNotams = [];
+      
+      if (Array.isArray(data)) {
+        data.forEach(item => {
+          const notamText = item.body || item.summary || '';
+          const parsed = parseNotamText(notamText);
+          
+          if (parsed) {
+            parsed.number = item.number || parsed.number;
+            parsed.icao = icao;
+            parsed.classification = item.classification || parsed.classification;
+            parsed.type = item.type || parsed.type;
+            parsed.validFrom = item.validFrom || parsed.validFrom;
+            parsed.validTo = item.validTo || parsed.validTo;
+            parsed.summary = item.summary || parsed.description;
+            parsed.location = item.location || parsed.aLine;
+            parsed.qLine = item.qLine || parsed.qLine;
+            parsed.source = 'Backend API (FAA Official)';
+            parsedNotams.push(parsed);
+          } else {
+            parsedNotams.push({
+              id: item.number || `${icao}-${Date.now()}`,
+              number: item.number || '',
+              icao: icao,
+              classification: item.classification || '',
+              type: item.type || '',
+              validFrom: item.validFrom || '',
+              validTo: item.validTo || '',
+              description: item.summary || item.body || 'No description available',
+              summary: item.summary || item.body || 'No summary available',
+              rawText: item.body || item.summary || '',
+              location: item.location || icao,
+              qLine: item.qLine || '',
+              source: 'Backend API (FAA Official)',
+              aLine: item.location || icao,
+              bLine: item.validFrom || '',
+              cLine: item.validTo || '',
+              isPermanent: item.validTo ? item.validTo.includes('PERM') : false
+            });
+          }
+        });
+      }
+      
+      setNotamData(parsedNotams);
+      
+    } catch (error) {
+      console.error(`Error fetching NOTAMs for ${icao}:`, error);
+      setNotamError(error.message);
+      setNotamData([]);
+    } finally {
+      setNotamLoading(false);
+    }
+  };
+
+  const handleNotamClick = (e) => {
+    if (isDragging || isLongPressed) return;
+    
+    if (e && typeof e.stopPropagation === 'function') {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setNotamModalOpen(true);
+    setTimeout(() => {
+      fetchNotamData();
+    }, 0);
+  };
+
+  const handleCloseNotamModal = () => {
+    setNotamModalOpen(false);
+    setNotamData([]);
+    setNotamError(null);
+  };
+
+  const getBorderClass = () => {
+    if (loading) return "border-gray-700";
+    if (!borderColoringEnabled) return "border-gray-600"; // Neutral border when border coloring is off
+    
+    // Use current color scheme for borders
+    const currentColors = getCurrentColors();
+    
+    // Check if TAF contains the current scheme's below-minima color class
+    const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+    
+    // Also check METAR conditions for border coloring if METAR filter is enabled
+    let metarBelowMinima = false;
+    if (metarFilterEnabled && metarRaw) {
+      const p = parseLine(metarRaw);
+      const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
+      const ceilOk = p.ceiling >= min.ceiling;
+      metarBelowMinima = !(visOk && ceilOk);
+    }
+    
+    // Use below minima colors if either TAF or METAR (when enabled) are below minima  
+    if (hasBelowMinimaConditions || metarBelowMinima) {
+      // Map text colors to appropriate border colors for BELOW minima
+      switch (currentColors.belowMinima) {
+        case 'text-red-400':
+        case 'text-red-500':
+          return "border-red-500";
+        case 'text-orange-400':
+          return "border-orange-500";
+        case 'text-yellow-400':
+          return "border-yellow-500";
+        case 'text-blue-400':
+          return "border-blue-500";
+        case 'text-cyan-400':
+          return "border-cyan-500";
+        case 'text-purple-400':
+          return "border-purple-500";
+        case 'text-pink-400':
+          return "border-pink-500";
+        case 'text-white':
+          return "border-gray-300";
+        case 'text-gray-300':
+          return "border-gray-400";
+        default:
+          return "border-red-500"; // fallback
+      }
+    }
+    
+    // Above minima - use appropriate border color
+    switch (currentColors.aboveMinima) {
+      case 'text-green-400':
+      case 'text-green-300':
+        return "border-green-500";
+      case 'text-blue-300':
+      case 'text-blue-400':
+        return "border-blue-500";
+      case 'text-cyan-300':
+      case 'text-cyan-400':
+        return "border-cyan-500";
+      case 'text-white':
+        return "border-gray-300";
+      case 'text-gray-300':
+        return "border-gray-400";
+      default:
+        return "border-green-500"; // fallback
+    }
+  };
+
+  const dragStyle = isDragging ? {
+    position: 'fixed',
+    left: dragPosition.x,
+    top: dragPosition.y,
+    zIndex: 1000,
+    transform: 'rotate(8deg) scale(1.1)',
+    transition: 'none',
+    pointerEvents: 'none',
+    opacity: 0.95,
+    filter: 'drop-shadow(0 25px 50px rgba(6, 182, 212, 0.4))',
+    animation: 'dragFloat 2s ease-in-out infinite'
+  } : {};
+
+  const baseStyle = isDragging ? { 
+    opacity: 0.2,
+    transform: 'scale(0.95)',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+  } : {};// Complete App.js with draggable weather cards like iPhone icons
 // Enhanced with Minima Filter Toggle and Color Customization
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
@@ -787,325 +1102,6 @@ const WeatherTile = ({
       COLOR_PRESETS.custom = customColors;
     }
   }, [customColors, colorScheme]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, minimized ? '1' : '0');
-    } catch (e) {}
-  }, [minimized, storageKey]);
-
-  // Drag event handlers (unchanged)
-  const handleDragStart = (e, isTouch = false) => {
-    if (!isLongPressed && isTouch) return;
-
-    e.preventDefault();
-    
-    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-    
-    const rect = dragRef.current.getBoundingClientRect();
-    const offset = {
-      x: clientX - rect.left,
-      y: clientY - rect.top
-    };
-    
-    setDragOffset(offset);
-    setDragPosition({ x: clientX - offset.x, y: clientY - offset.y });
-    setIsDragging(true);
-    onDragStart(icao);
-  };
-
-  const handleDragMove = (e, isTouch = false) => {
-    if (!isDragging) return;
-    
-    e.preventDefault();
-    
-    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-    
-    setDragPosition({
-      x: clientX - dragOffset.x,
-      y: clientY - dragOffset.y
-    });
-
-    // Find the element we're hovering over
-    const elementBelow = document.elementFromPoint(clientX, clientY);
-    const tileBelow = elementBelow?.closest('[data-icao]');
-    
-    if (tileBelow && tileBelow.dataset.icao !== icao) {
-      // Calculate if we should insert before or after the target
-      const rect = tileBelow.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      
-      // For grid layout, consider both X and Y positions
-      const insertAfter = clientX > centerX || clientY > centerY;
-      
-      onReorder(icao, tileBelow.dataset.icao, insertAfter);
-    }
-  };
-
-  const handleDragEnd = () => {
-    if (!isDragging) return;
-    
-    setIsDragging(false);
-    setIsLongPressed(false);
-    setDragPosition({ x: 0, y: 0 });
-    onDragEnd();
-  };
-
-  // Long press handling for touch devices
-  const handleTouchStart = (e) => {
-    longPressTimer.current = setTimeout(() => {
-      setIsLongPressed(true);
-      // Add haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 500); // 500ms long press
-  };
-
-  const handleTouchEnd = (e) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-    }
-    if (!isDragging) {
-      setIsLongPressed(false);
-    } else {
-      handleDragEnd();
-    }
-  };
-
-  // Mouse event handlers
-  const handleMouseDown = (e) => {
-    handleDragStart(e, false);
-  };
-
-  const handleMouseMove = (e) => {
-    handleDragMove(e, false);
-  };
-
-  const handleMouseUp = () => {
-    handleDragEnd();
-  };
-
-  // Touch event handlers
-  const handleTouchMove = (e) => {
-    if (isLongPressed) {
-      if (!isDragging) {
-        handleDragStart(e, true);
-      } else {
-        handleDragMove(e, true);
-      }
-    }
-  };
-
-  // Add global event listeners
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
-      document.addEventListener('touchend', handleTouchEnd);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEnd);
-      };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDragging, isLongPressed, dragOffset]);
-
-  const toggleMinimize = () => setMinimized(prev => !prev);
-
-  // NOTAM handling (unchanged)
-  const fetchNotamData = async () => {
-    setNotamLoading(true);
-    setNotamError(null);
-    
-    try {
-      const response = await fetch(`/api/notams?icao=${icao}`);
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.');
-        } else if (response.status === 400) {
-          throw new Error('Invalid ICAO code provided.');
-        } else if (response.status === 500) {
-          throw new Error('Server error occurred while fetching NOTAMs.');
-        } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-      }
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      
-      const parsedNotams = [];
-      
-      if (Array.isArray(data)) {
-        data.forEach(item => {
-          const notamText = item.body || item.summary || '';
-          const parsed = parseNotamText(notamText);
-          
-          if (parsed) {
-            parsed.number = item.number || parsed.number;
-            parsed.icao = icao;
-            parsed.classification = item.classification || parsed.classification;
-            parsed.type = item.type || parsed.type;
-            parsed.validFrom = item.validFrom || parsed.validFrom;
-            parsed.validTo = item.validTo || parsed.validTo;
-            parsed.summary = item.summary || parsed.description;
-            parsed.location = item.location || parsed.aLine;
-            parsed.qLine = item.qLine || parsed.qLine;
-            parsed.source = 'Backend API (FAA Official)';
-            parsedNotams.push(parsed);
-          } else {
-            parsedNotams.push({
-              id: item.number || `${icao}-${Date.now()}`,
-              number: item.number || '',
-              icao: icao,
-              classification: item.classification || '',
-              type: item.type || '',
-              validFrom: item.validFrom || '',
-              validTo: item.validTo || '',
-              description: item.summary || item.body || 'No description available',
-              summary: item.summary || item.body || 'No summary available',
-              rawText: item.body || item.summary || '',
-              location: item.location || icao,
-              qLine: item.qLine || '',
-              source: 'Backend API (FAA Official)',
-              aLine: item.location || icao,
-              bLine: item.validFrom || '',
-              cLine: item.validTo || '',
-              isPermanent: item.validTo ? item.validTo.includes('PERM') : false
-            });
-          }
-        });
-      }
-      
-      setNotamData(parsedNotams);
-      
-    } catch (error) {
-      console.error(`Error fetching NOTAMs for ${icao}:`, error);
-      setNotamError(error.message);
-      setNotamData([]);
-    } finally {
-      setNotamLoading(false);
-    }
-  };
-
-  const handleNotamClick = (e) => {
-    if (isDragging || isLongPressed) return;
-    
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    setNotamModalOpen(true);
-    setTimeout(() => {
-      fetchNotamData();
-    }, 0);
-  };
-
-  const handleCloseNotamModal = () => {
-    setNotamModalOpen(false);
-    setNotamData([]);
-    setNotamError(null);
-  };
-
-  const getBorderClass = () => {
-    if (loading) return "border-gray-700";
-    if (!borderColoringEnabled) return "border-gray-600"; // Neutral border when border coloring is off
-    
-    // Use current color scheme for borders
-    const currentColors = getCurrentColors();
-    
-    // Check if TAF contains the current scheme's below-minima color class
-    const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
-    
-    // Also check METAR conditions for border coloring if METAR filter is enabled
-    let metarBelowMinima = false;
-    if (metarFilterEnabled && metarRaw) {
-      const p = parseLine(metarRaw);
-      const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
-      const ceilOk = p.ceiling >= min.ceiling;
-      metarBelowMinima = !(visOk && ceilOk);
-    }
-    
-    // Use below minima colors if either TAF or METAR (when enabled) are below minima  
-    if (hasBelowMinimaConditions || metarBelowMinima) {
-      // Map text colors to appropriate border colors for BELOW minima
-      switch (currentColors.belowMinima) {
-        case 'text-red-400':
-        case 'text-red-500':
-          return "border-red-500";
-        case 'text-orange-400':
-          return "border-orange-500";
-        case 'text-yellow-400':
-          return "border-yellow-500";
-        case 'text-blue-400':
-          return "border-blue-500";
-        case 'text-cyan-400':
-          return "border-cyan-500";
-        case 'text-purple-400':
-          return "border-purple-500";
-        case 'text-pink-400':
-          return "border-pink-500";
-        case 'text-white':
-          return "border-gray-300";
-        case 'text-gray-300':
-          return "border-gray-400";
-        default:
-          return "border-red-500"; // fallback
-      }
-    }
-    
-    // Above minima - use appropriate border color
-    switch (currentColors.aboveMinima) {
-      case 'text-green-400':
-      case 'text-green-300':
-        return "border-green-500";
-      case 'text-blue-300':
-      case 'text-blue-400':
-        return "border-blue-500";
-      case 'text-cyan-300':
-      case 'text-cyan-400':
-        return "border-cyan-500";
-      case 'text-white':
-        return "border-gray-300";
-      case 'text-gray-300':
-        return "border-gray-400";
-      default:
-        return "border-green-500"; // fallback
-    }
-  };
-
-  const dragStyle = isDragging ? {
-    position: 'fixed',
-    left: dragPosition.x,
-    top: dragPosition.y,
-    zIndex: 1000,
-    transform: 'rotate(8deg) scale(1.1)',
-    transition: 'none',
-    pointerEvents: 'none',
-    opacity: 0.95,
-    filter: 'drop-shadow(0 25px 50px rgba(6, 182, 212, 0.4))',
-    animation: 'dragFloat 2s ease-in-out infinite'
-  } : {};
-
-  const baseStyle = isDragging ? { 
-    opacity: 0.2,
-    transform: 'scale(0.95)',
-    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-  } : {};
-
-  const currentColors = getCurrentColors();
 
   return (
     <>
