@@ -451,7 +451,7 @@ const SettingsPanel = ({
               </p>
               <p>
                 <strong>Border Coloring:</strong> {borderColoringEnabled 
-                  ? 'Tile borders will be green (above minima) or red (below minima)'
+                  ? 'Tile borders will match your selected color scheme (above/below minima colors)'
                   : 'All tile borders will be neutral gray'
                 }
               </p>
@@ -949,10 +949,55 @@ const WeatherTile = ({
   const getBorderClass = () => {
     if (loading) return "border-gray-700";
     if (!borderColoringEnabled) return "border-gray-600"; // Neutral border when border coloring is off
+    
+    // Use current color scheme for borders
+    const currentColors = getCurrentColors();
+    
     if (tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled) {
-      return "border-red-500";
+      // Map text colors to appropriate border colors
+      switch (currentColors.belowMinima) {
+        case 'text-red-400':
+        case 'text-red-500':
+          return "border-red-500";
+        case 'text-orange-400':
+          return "border-orange-500";
+        case 'text-yellow-400':
+          return "border-yellow-500";
+        case 'text-blue-400':
+          return "border-blue-500";
+        case 'text-cyan-400':
+          return "border-cyan-500";
+        case 'text-purple-400':
+          return "border-purple-500";
+        case 'text-pink-400':
+          return "border-pink-500";
+        case 'text-white':
+          return "border-gray-300";
+        case 'text-gray-300':
+          return "border-gray-400";
+        default:
+          return "border-red-500"; // fallback
+      }
     }
-    return "border-green-500";
+    
+    // Above minima - use appropriate border color
+    switch (currentColors.aboveMinima) {
+      case 'text-green-400':
+      case 'text-green-300':
+        return "border-green-500";
+      case 'text-blue-300':
+      case 'text-blue-400':
+        return "border-blue-500";
+      case 'text-cyan-300':
+      case 'text-cyan-400':
+        return "border-cyan-500";
+      case 'text-white':
+        return "border-gray-300";
+      case 'text-gray-300':
+        return "border-gray-400";
+      default:
+        return "border-green-500"; // fallback
+    }
   };
 
   const dragStyle = isDragging ? {
@@ -994,10 +1039,58 @@ const WeatherTile = ({
           ...(isDragging ? {} : {
             background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
             backdropFilter: 'blur(10px)',
-            borderColor: loading ? 'rgb(75, 85, 99)' : 
-                        !borderColoringEnabled ? 'rgb(75, 85, 99)' :
-                        tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled ? 'rgb(239, 68, 68)' : 
-                        'rgb(34, 197, 94)'
+            borderColor: (() => {
+              if (loading) return 'rgb(75, 85, 99)';
+              if (!borderColoringEnabled) return 'rgb(75, 85, 99)';
+              
+              const currentColors = getCurrentColors();
+              
+              if (tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled) {
+                // Below minima colors
+                switch (currentColors.belowMinima) {
+                  case 'text-red-400':
+                  case 'text-red-500':
+                    return 'rgb(239, 68, 68)'; // red-500
+                  case 'text-orange-400':
+                    return 'rgb(249, 115, 22)'; // orange-500
+                  case 'text-yellow-400':
+                    return 'rgb(234, 179, 8)'; // yellow-500
+                  case 'text-blue-400':
+                    return 'rgb(59, 130, 246)'; // blue-500
+                  case 'text-cyan-400':
+                    return 'rgb(6, 182, 212)'; // cyan-500
+                  case 'text-purple-400':
+                    return 'rgb(168, 85, 247)'; // purple-500
+                  case 'text-pink-400':
+                    return 'rgb(236, 72, 153)'; // pink-500
+                  case 'text-white':
+                    return 'rgb(209, 213, 219)'; // gray-300
+                  case 'text-gray-300':
+                    return 'rgb(156, 163, 175)'; // gray-400
+                  default:
+                    return 'rgb(239, 68, 68)'; // fallback red-500
+                }
+              }
+              
+              // Above minima colors
+              switch (currentColors.aboveMinima) {
+                case 'text-green-400':
+                case 'text-green-300':
+                  return 'rgb(34, 197, 94)'; // green-500
+                case 'text-blue-300':
+                case 'text-blue-400':
+                  return 'rgb(59, 130, 246)'; // blue-500
+                case 'text-cyan-300':
+                case 'text-cyan-400':
+                  return 'rgb(6, 182, 212)'; // cyan-500
+                case 'text-white':
+                  return 'rgb(209, 213, 219)'; // gray-300
+                case 'text-gray-300':
+                  return 'rgb(156, 163, 175)'; // gray-400
+                default:
+                  return 'rgb(34, 197, 94)'; // fallback green-500
+              }
+            })()
           })
         }}
         onMouseDown={handleMouseDown}
