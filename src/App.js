@@ -350,7 +350,9 @@ const SettingsPanel = ({
   colorScheme, 
   setColorScheme,
   customColors,
-  setCustomColors
+  setCustomColors,
+  borderColoringEnabled,
+  setBorderColoringEnabled
 }) => {
   const modalRef = useRef(null);
 
@@ -397,7 +399,7 @@ const SettingsPanel = ({
           {/* Minima Filter Toggle */}
           <div className="bg-gray-900 rounded-lg p-4">
             <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filter</h4>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-4">
               <label className="inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -413,16 +415,47 @@ const SettingsPanel = ({
                   }`} />
                 </div>
                 <span className="ml-3 text-gray-300">
-                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code weather based on minima
+                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code weather text based on minima
                 </span>
               </label>
             </div>
-            <p className="text-sm text-gray-400 mt-2">
-              {minimaFilterEnabled 
-                ? 'Weather conditions below minima will be highlighted in warning colors'
-                : 'All weather text will use the same base color regardless of conditions'
-              }
-            </p>
+            
+            {/* Border Coloring Toggle */}
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={borderColoringEnabled}
+                  onChange={(e) => setBorderColoringEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
+                  borderColoringEnabled ? 'bg-green-500' : 'bg-gray-600'
+                }`}>
+                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
+                    borderColoringEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </div>
+                <span className="ml-3 text-gray-300">
+                  {borderColoringEnabled ? 'ON' : 'OFF'} - Color code tile borders based on minima
+                </span>
+              </label>
+            </div>
+            
+            <div className="mt-3 text-sm text-gray-400 space-y-1">
+              <p>
+                <strong>Text Filter:</strong> {minimaFilterEnabled 
+                  ? 'Weather conditions below minima will be highlighted in warning colors'
+                  : 'All weather text will use the same base color regardless of conditions'
+                }
+              </p>
+              <p>
+                <strong>Border Coloring:</strong> {borderColoringEnabled 
+                  ? 'Tile borders will be green (above minima) or red (below minima)'
+                  : 'All tile borders will be neutral gray'
+                }
+              </p>
+            </div>
           </div>
 
           {/* Color Scheme Selection */}
@@ -611,7 +644,8 @@ const WeatherTile = ({
   onReorder,
   minimaFilterEnabled,
   colorScheme,
-  customColors
+  customColors,
+  borderColoringEnabled
 }) => {
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
@@ -914,8 +948,8 @@ const WeatherTile = ({
 
   const getBorderClass = () => {
     if (loading) return "border-gray-700";
-    if (!minimaFilterEnabled) return "border-gray-600"; // Neutral border when filter is off
-    if (tafHtml && tafHtml.includes("text-red-400")) {
+    if (!borderColoringEnabled) return "border-gray-600"; // Neutral border when border coloring is off
+    if (tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled) {
       return "border-red-500";
     }
     return "border-green-500";
@@ -961,8 +995,8 @@ const WeatherTile = ({
             background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
             backdropFilter: 'blur(10px)',
             borderColor: loading ? 'rgb(75, 85, 99)' : 
-                        !minimaFilterEnabled ? 'rgb(75, 85, 99)' :
-                        tafHtml && tafHtml.includes("text-red-400") ? 'rgb(239, 68, 68)' : 
+                        !borderColoringEnabled ? 'rgb(75, 85, 99)' :
+                        tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled ? 'rgb(239, 68, 68)' : 
                         'rgb(34, 197, 94)'
           })
         }}
@@ -1159,6 +1193,14 @@ const WeatherMonitorApp = () => {
     }
   });
 
+  const [borderColoringEnabled, setBorderColoringEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("borderColoringEnabled") || "true");
+    } catch (e) {
+      return true;
+    }
+  });
+
   const [colorScheme, setColorScheme] = useState(() => {
     try {
       return localStorage.getItem("colorScheme") || "classic";
@@ -1217,6 +1259,12 @@ const WeatherMonitorApp = () => {
       localStorage.setItem("minimaFilterEnabled", JSON.stringify(minimaFilterEnabled));
     } catch (e) {}
   }, [minimaFilterEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("borderColoringEnabled", JSON.stringify(borderColoringEnabled));
+    } catch (e) {}
+  }, [borderColoringEnabled]);
 
   useEffect(() => {
     try {
@@ -1422,11 +1470,18 @@ const WeatherMonitorApp = () => {
 
           {/* Filter Status Indicator */}
           <div className="flex items-center gap-2 ml-4 text-sm">
-            <span className="text-gray-400">Filter:</span>
+            <span className="text-gray-400">Text:</span>
             <span className={`px-2 py-1 rounded text-xs font-medium ${
               minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {minimaFilterEnabled ? 'ON' : 'OFF'}
+            </span>
+            <span className="text-gray-400">|</span>
+            <span className="text-gray-400">Borders:</span>
+            <span className={`px-2 py-1 rounded text-xs font-medium ${
+              borderColoringEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {borderColoringEnabled ? 'ON' : 'OFF'}
             </span>
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">Colors:</span>
@@ -1467,6 +1522,7 @@ const WeatherMonitorApp = () => {
                 minimaFilterEnabled={minimaFilterEnabled}
                 colorScheme={colorScheme}
                 customColors={customColors}
+                borderColoringEnabled={borderColoringEnabled}
               />
               
               {/* Enhanced insertion space indicator after */}
@@ -1505,6 +1561,8 @@ const WeatherMonitorApp = () => {
         setColorScheme={setColorScheme}
         customColors={customColors}
         setCustomColors={setCustomColors}
+        borderColoringEnabled={borderColoringEnabled}
+        setBorderColoringEnabled={setBorderColoringEnabled}
       />
     </div>
   );
