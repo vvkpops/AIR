@@ -1,14 +1,54 @@
 // Complete App.js with draggable weather cards like iPhone icons
+// Enhanced with Minima Filter Toggle and Color Customization
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 
-// Weather utilities (unchanged)
+// Weather utilities
 const TAF_CACHE_MS = 600000; // 10 minutes
 const METAR_CACHE_MS = 60000; // 1 minute
 
 const weatherCache = {};
 const corsProxy = "https://corsproxy.io/?";
+
+// Color presets for customization
+const COLOR_PRESETS = {
+  'classic': {
+    name: 'Classic Green/Red',
+    aboveMinima: 'text-green-300',
+    belowMinima: 'text-red-400',
+    metar: 'text-green-300',
+    taf: 'text-green-300'
+  },
+  'aviation': {
+    name: 'Aviation Blue/Amber',
+    aboveMinima: 'text-blue-300',
+    belowMinima: 'text-yellow-400',
+    metar: 'text-blue-300',
+    taf: 'text-blue-300'
+  },
+  'modern': {
+    name: 'Modern Cyan/Orange',
+    aboveMinima: 'text-cyan-300',
+    belowMinima: 'text-orange-400',
+    metar: 'text-cyan-300',
+    taf: 'text-cyan-300'
+  },
+  'highContrast': {
+    name: 'High Contrast',
+    aboveMinima: 'text-white',
+    belowMinima: 'text-red-500',
+    metar: 'text-white',
+    taf: 'text-white'
+  },
+  'custom': {
+    name: 'Custom Colors',
+    aboveMinima: 'text-green-400',
+    belowMinima: 'text-red-400',
+    metar: 'text-green-400',
+    taf: 'text-green-400'
+  }
+};
 
 async function fetchTAF(icao) {
   if (!icao) return "";
@@ -95,12 +135,26 @@ function parseLine(line) {
   return { ceiling, visMiles, isGreater, isLess };
 }
 
-function highlightTAFAllBelow(raw, minC, minV) {
+// Enhanced TAF highlighting function with color customization and filter toggle
+function highlightTAFWithOptions(raw, minC, minV, filterEnabled, colorScheme) {
+  const colors = COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
+  
   return raw.split("\n").map(line => {
     const p = parseLine(line);
     const visOk = p.isGreater ? true : (p.visMiles >= minV);
     const ceilOk = p.ceiling >= minC;
-    return `<div class="${!(visOk && ceilOk) ? "text-red-400 font-bold" : ""}">${line}</div>`;
+    const meetsMinima = visOk && ceilOk;
+    
+    // If filter is disabled, use base color for all text
+    if (!filterEnabled) {
+      return `<div class="${colors.taf}">${line}</div>`;
+    }
+    
+    // If filter is enabled, apply color coding based on minima
+    const colorClass = meetsMinima ? colors.aboveMinima : colors.belowMinima;
+    const fontWeight = meetsMinima ? '' : 'font-bold';
+    
+    return `<div class="${colorClass} ${fontWeight}">${line}</div>`;
   }).join("");
 }
 
@@ -252,6 +306,211 @@ const Header = () => {
   );
 };
 
+// Color Picker Component
+const ColorPicker = ({ label, value, onChange, className = "" }) => {
+  const baseColors = [
+    { name: 'Red', value: 'text-red-400', color: '#f87171' },
+    { name: 'Orange', value: 'text-orange-400', color: '#fb923c' },
+    { name: 'Yellow', value: 'text-yellow-400', color: '#facc15' },
+    { name: 'Green', value: 'text-green-400', color: '#4ade80' },
+    { name: 'Blue', value: 'text-blue-400', color: '#60a5fa' },
+    { name: 'Cyan', value: 'text-cyan-400', color: '#22d3ee' },
+    { name: 'Purple', value: 'text-purple-400', color: '#a78bfa' },
+    { name: 'Pink', value: 'text-pink-400', color: '#f472b6' },
+    { name: 'White', value: 'text-white', color: '#ffffff' },
+    { name: 'Gray', value: 'text-gray-300', color: '#d1d5db' }
+  ];
+
+  return (
+    <div className={`flex flex-col gap-2 ${className}`}>
+      <label className="text-sm font-medium text-gray-300">{label}</label>
+      <div className="flex flex-wrap gap-1">
+        {baseColors.map(color => (
+          <button
+            key={color.value}
+            onClick={() => onChange(color.value)}
+            className={`w-8 h-8 rounded border-2 transition-all duration-200 hover:scale-110 ${
+              value === color.value ? 'border-white shadow-md' : 'border-gray-600'
+            }`}
+            style={{ backgroundColor: color.color }}
+            title={color.name}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Settings Panel Component
+const SettingsPanel = ({ 
+  isOpen, 
+  onClose, 
+  minimaFilterEnabled, 
+  setMinimaFilterEnabled, 
+  colorScheme, 
+  setColorScheme,
+  customColors,
+  setCustomColors
+}) => {
+  const modalRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+    
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+      document.body.classList.add('modal-open');
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+      document.body.classList.remove('modal-open');
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return ReactDOM.createPortal(
+    <div className="modal-overlay modal-backdrop-blur modal-animate">
+      <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl">
+        <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
+          <h3 className="text-xl font-bold text-cyan-400">Display Settings</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
+          >
+            ×
+          </button>
+        </div>
+        
+        <div className="modal-body-scrollable p-6 space-y-6">
+          {/* Minima Filter Toggle */}
+          <div className="bg-gray-900 rounded-lg p-4">
+            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filter</h4>
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={minimaFilterEnabled}
+                  onChange={(e) => setMinimaFilterEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
+                  minimaFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
+                }`}>
+                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
+                    minimaFilterEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </div>
+                <span className="ml-3 text-gray-300">
+                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code weather based on minima
+                </span>
+              </label>
+            </div>
+            <p className="text-sm text-gray-400 mt-2">
+              {minimaFilterEnabled 
+                ? 'Weather conditions below minima will be highlighted in warning colors'
+                : 'All weather text will use the same base color regardless of conditions'
+              }
+            </p>
+          </div>
+
+          {/* Color Scheme Selection */}
+          <div className="bg-gray-900 rounded-lg p-4">
+            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Color Schemes</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  onClick={() => setColorScheme(key)}
+                  className={`p-3 rounded-lg border-2 text-left transition-all duration-200 ${
+                    colorScheme === key 
+                      ? 'border-cyan-400 bg-gray-800' 
+                      : 'border-gray-600 bg-gray-800 hover:border-gray-500'
+                  }`}
+                >
+                  <div className="font-medium text-gray-200 mb-1">{preset.name}</div>
+                  <div className="flex gap-2 text-xs">
+                    <span className={`${preset.aboveMinima} bg-gray-700 px-2 py-1 rounded`}>
+                      Above Minima
+                    </span>
+                    <span className={`${preset.belowMinima} bg-gray-700 px-2 py-1 rounded font-bold`}>
+                      Below Minima
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Colors (only show if custom scheme is selected) */}
+          {colorScheme === 'custom' && (
+            <div className="bg-gray-900 rounded-lg p-4">
+              <h4 className="text-lg font-semibold text-cyan-300 mb-4">Custom Color Configuration</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <ColorPicker
+                  label="Above Minima Color"
+                  value={customColors.aboveMinima}
+                  onChange={(color) => setCustomColors(prev => ({ ...prev, aboveMinima: color }))}
+                />
+                <ColorPicker
+                  label="Below Minima Color"
+                  value={customColors.belowMinima}
+                  onChange={(color) => setCustomColors(prev => ({ ...prev, belowMinima: color }))}
+                />
+                <ColorPicker
+                  label="METAR Text Color"
+                  value={customColors.metar}
+                  onChange={(color) => setCustomColors(prev => ({ ...prev, metar: color }))}
+                />
+                <ColorPicker
+                  label="TAF Text Color"
+                  value={customColors.taf}
+                  onChange={(color) => setCustomColors(prev => ({ ...prev, taf: color }))}
+                />
+              </div>
+              
+              {/* Preview */}
+              <div className="mt-4 p-3 bg-black rounded border border-gray-700">
+                <div className="text-sm text-gray-400 mb-2">Preview:</div>
+                <div className={`${customColors.metar} font-mono text-sm mb-1`}>
+                  METAR KJFK 012351Z 26008KT 10SM FEW250 10/M06 A3012
+                </div>
+                <div className={`${customColors.aboveMinima} font-mono text-sm mb-1`}>
+                  TAF Line Above Minima: 1000 OVC 6SM -SN
+                </div>
+                <div className={`${customColors.belowMinima} font-mono text-sm font-bold`}>
+                  TAF Line Below Minima: 200 OVC 1/2SM +SN
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer-fixed border-t border-gray-700 p-4 bg-gray-900 text-center rounded-b-xl">
+          <button
+            onClick={onClose}
+            className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2 rounded-lg transition-colors"
+          >
+            Apply Settings
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.getElementById('modal-root')
+  );
+};
+
 // Simple NOTAM Modal (unchanged)
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
@@ -337,7 +596,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   );
 };
 
-// Updated Weather Tile Component with draggable functionality
+// Updated Weather Tile Component with new options
 const WeatherTile = ({ 
   icao, 
   weatherMinima, 
@@ -349,7 +608,10 @@ const WeatherTile = ({
   onDragStart,
   onDragEnd,
   draggedItem,
-  onReorder
+  onReorder,
+  minimaFilterEnabled,
+  colorScheme,
+  customColors
 }) => {
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
@@ -380,7 +642,15 @@ const WeatherTile = ({
   const min = weatherMinima[icao] || globalWeatherMinima;
   const usingDefault = !weatherMinima[icao];
 
-  // Weather data fetching (unchanged)
+  // Get current color scheme
+  const getCurrentColors = () => {
+    if (colorScheme === 'custom') {
+      return customColors;
+    }
+    return COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
+  };
+
+  // Weather data fetching with enhanced color options
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -392,7 +662,7 @@ const WeatherTile = ({
       setMetarRaw(metar);
       
       if (taf) {
-        const html = highlightTAFAllBelow(taf, min.ceiling, min.vis);
+        const html = highlightTAFWithOptions(taf, min.ceiling, min.vis, minimaFilterEnabled, colorScheme === 'custom' ? 'custom' : colorScheme);
         setTafHtml(html);
       }
       
@@ -402,7 +672,14 @@ const WeatherTile = ({
     fetchData();
     const intervalId = setInterval(fetchData, 300000);
     return () => clearInterval(intervalId);
-  }, [icao, min.ceiling, min.vis]);
+  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme]);
+
+  // Update custom colors in COLOR_PRESETS when customColors change
+  useEffect(() => {
+    if (colorScheme === 'custom') {
+      COLOR_PRESETS.custom = customColors;
+    }
+  }, [customColors, colorScheme]);
 
   useEffect(() => {
     try {
@@ -410,9 +687,9 @@ const WeatherTile = ({
     } catch (e) {}
   }, [minimized, storageKey]);
 
-  // Drag event handlers
+  // Drag event handlers (unchanged)
   const handleDragStart = (e, isTouch = false) => {
-    if (!isLongPressed && isTouch) return; // Only allow touch drag after long press
+    if (!isLongPressed && isTouch) return;
 
     e.preventDefault();
     
@@ -637,6 +914,7 @@ const WeatherTile = ({
 
   const getBorderClass = () => {
     if (loading) return "border-gray-700";
+    if (!minimaFilterEnabled) return "border-gray-600"; // Neutral border when filter is off
     if (tafHtml && tafHtml.includes("text-red-400")) {
       return "border-red-500";
     }
@@ -662,6 +940,8 @@ const WeatherTile = ({
     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
   } : {};
 
+  const currentColors = getCurrentColors();
+
   return (
     <>
       {/* Original tile (with enhanced animations) */}
@@ -681,6 +961,7 @@ const WeatherTile = ({
             background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
             backdropFilter: 'blur(10px)',
             borderColor: loading ? 'rgb(75, 85, 99)' : 
+                        !minimaFilterEnabled ? 'rgb(75, 85, 99)' :
                         tafHtml && tafHtml.includes("text-red-400") ? 'rgb(239, 68, 68)' : 
                         'rgb(34, 197, 94)'
           })
@@ -722,7 +1003,7 @@ const WeatherTile = ({
         {/* Enhanced Title with gradient text */}
         <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
 
-        {/* Minima controls */}
+        {/* Minima controls with filter status indicator */}
         <div className="flex gap-3 items-center mt-2 text-xs">
           <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
             Ceil: 
@@ -757,6 +1038,15 @@ const WeatherTile = ({
           }
         </div>
 
+        {/* Filter status indicator */}
+        {!minimaFilterEnabled && (
+          <div className="mt-1 text-center">
+            <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+              Filter: OFF
+            </span>
+          </div>
+        )}
+
         {/* Enhanced NOTAM Button with modern styling */}
         <div className="mt-2 flex justify-end">
           <button
@@ -789,14 +1079,14 @@ const WeatherTile = ({
             {metarRaw && (
               <div className="mt-2 text-xs text-gray-300">
                 <strong className="text-cyan-400">METAR:</strong> 
-                <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300">{metarRaw}</div>
+                <div className={`mt-1 bg-gray-900 p-2 rounded font-mono ${currentColors.metar}`}>{metarRaw}</div>
               </div>
             )}
             
             {tafHtml && (
               <div className="mt-2 text-xs">
                 <strong className="text-cyan-400">TAF:</strong>
-                <div className="mt-1 bg-gray-900 p-2 rounded font-mono text-green-300" dangerouslySetInnerHTML={{ __html: tafHtml }}></div>
+                <div className="mt-1 bg-gray-900 p-2 rounded font-mono" dangerouslySetInnerHTML={{ __html: tafHtml }}></div>
               </div>
             )}
           </>
@@ -834,7 +1124,7 @@ const WeatherTile = ({
   );
 };
 
-// Main App Component with drag and drop functionality
+// Main App Component with drag and drop functionality and new settings
 const WeatherMonitorApp = () => {
   // State variables
   const [globalWeatherMinima, setGlobalWeatherMinima] = useState(
@@ -860,6 +1150,43 @@ const WeatherMonitorApp = () => {
     }
   });
 
+  // New settings state
+  const [minimaFilterEnabled, setMinimaFilterEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("minimaFilterEnabled") || "true");
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const [colorScheme, setColorScheme] = useState(() => {
+    try {
+      return localStorage.getItem("colorScheme") || "classic";
+    } catch (e) {
+      return "classic";
+    }
+  });
+
+  const [customColors, setCustomColors] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("customColors") || JSON.stringify({
+        aboveMinima: 'text-green-400',
+        belowMinima: 'text-red-400',
+        metar: 'text-green-400',
+        taf: 'text-green-400'
+      }));
+    } catch (e) {
+      return {
+        aboveMinima: 'text-green-400',
+        belowMinima: 'text-red-400',
+        metar: 'text-green-400',
+        taf: 'text-green-400'
+      };
+    }
+  });
+
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+
   // Drag state with insertion position tracking
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragInsertPosition, setDragInsertPosition] = useState(null);
@@ -884,6 +1211,24 @@ const WeatherMonitorApp = () => {
       localStorage.setItem("globalWeatherMinimized", JSON.stringify(globalWeatherMinimized));
     } catch (e) {}
   }, [globalWeatherMinimized]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("minimaFilterEnabled", JSON.stringify(minimaFilterEnabled));
+    } catch (e) {}
+  }, [minimaFilterEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("colorScheme", colorScheme);
+    } catch (e) {}
+  }, [colorScheme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("customColors", JSON.stringify(customColors));
+    } catch (e) {}
+  }, [customColors]);
 
   // Handler functions
   const handleSetWeatherMinima = (icao, field, value) => {
@@ -1006,7 +1351,7 @@ const WeatherMonitorApp = () => {
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
       
-      {/* Global Weather Minima Controls */}
+      {/* Global Weather Minima Controls with Settings Button */}
       <div className="max-w-screen-2xl mx-auto px-6 mb-4">
         <div className="flex flex-wrap gap-2 sm:gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
           <span className="font-bold text-cyan-300">Weather Minima:</span>
@@ -1035,6 +1380,19 @@ const WeatherMonitorApp = () => {
           >
             Set Default
           </button>
+          
+          {/* Settings Button */}
+          <button
+            onClick={() => setSettingsPanelOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2"
+            title="Display Settings"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"></path>
+            </svg>
+            Settings
+          </button>
         </div>
       </div>
       
@@ -1061,10 +1419,22 @@ const WeatherMonitorApp = () => {
           >
             {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
           </button>
+
+          {/* Filter Status Indicator */}
+          <div className="flex items-center gap-2 ml-4 text-sm">
+            <span className="text-gray-400">Filter:</span>
+            <span className={`px-2 py-1 rounded text-xs font-medium ${
+              minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {minimaFilterEnabled ? 'ON' : 'OFF'}
+            </span>
+            <span className="text-gray-400">|</span>
+            <span className="text-gray-400">Colors:</span>
+            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
+              {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
+            </span>
+          </div>
         </div>
-        
-        {/* Drag instruction - REMOVED */}
-        {/* Enhanced visual feedback replaces the need for instructions */}
       </div>
       
       {/* Weather Tiles Grid */}
@@ -1094,6 +1464,9 @@ const WeatherMonitorApp = () => {
                 onDragEnd={handleDragEnd}
                 onReorder={handleReorder}
                 draggedItem={draggedItem}
+                minimaFilterEnabled={minimaFilterEnabled}
+                colorScheme={colorScheme}
+                customColors={customColors}
               />
               
               {/* Enhanced insertion space indicator after */}
@@ -1115,9 +1488,24 @@ const WeatherMonitorApp = () => {
             <p className="text-gray-500">
               Add ICAO codes above to start monitoring weather conditions
             </p>
+            <p className="text-gray-400 mt-2 text-sm">
+              Use the Settings button to configure color coding and minima filtering
+            </p>
           </div>
         )}
       </div>
+
+      {/* Settings Panel */}
+      <SettingsPanel
+        isOpen={settingsPanelOpen}
+        onClose={() => setSettingsPanelOpen(false)}
+        minimaFilterEnabled={minimaFilterEnabled}
+        setMinimaFilterEnabled={setMinimaFilterEnabled}
+        colorScheme={colorScheme}
+        setColorScheme={setColorScheme}
+        customColors={customColors}
+        setCustomColors={setCustomColors}
+      />
     </div>
   );
 };
