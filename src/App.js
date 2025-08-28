@@ -449,7 +449,15 @@ const WeatherTile = ({
     const tileBelow = elementBelow?.closest('[data-icao]');
     
     if (tileBelow && tileBelow.dataset.icao !== icao) {
-      onReorder(icao, tileBelow.dataset.icao);
+      // Calculate if we should insert before or after the target
+      const rect = tileBelow.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      
+      // For grid layout, consider both X and Y positions
+      const insertAfter = clientX > centerX || clientY > centerY;
+      
+      onReorder(icao, tileBelow.dataset.icao, insertAfter);
     }
   };
 
@@ -835,8 +843,9 @@ const WeatherMonitorApp = () => {
     }
   });
 
-  // Drag state
+  // Drag state with insertion position tracking
   const [draggedItem, setDraggedItem] = useState(null);
+  const [dragInsertPosition, setDragInsertPosition] = useState(null);
   
   const icaoInputRef = useRef(null);
 
@@ -929,31 +938,51 @@ const WeatherMonitorApp = () => {
   // Drag and drop handlers
   const handleDragStart = (icao) => {
     setDraggedItem(icao);
+    setDragInsertPosition(null);
   };
 
   const handleDragEnd = () => {
     setDraggedItem(null);
+    setDragInsertPosition(null);
   };
 
-  const handleReorder = (draggedIcao, targetIcao) => {
+  const handleReorder = (draggedIcao, targetIcao, insertAfter = false) => {
     if (draggedIcao === targetIcao) return;
     
-    setWeatherICAOs(prev => {
-      const newOrder = [...prev];
-      const draggedIndex = newOrder.indexOf(draggedIcao);
-      const targetIndex = newOrder.indexOf(targetIcao);
+    const newInsertPosition = { targetIcao, insertAfter };
+    
+    // Only update if position actually changed
+    if (!dragInsertPosition || 
+        dragInsertPosition.targetIcao !== newInsertPosition.targetIcao || 
+        dragInsertPosition.insertAfter !== newInsertPosition.insertAfter) {
+      setDragInsertPosition(newInsertPosition);
       
-      if (draggedIndex === -1 || targetIndex === -1) return prev;
-      
-      // Remove dragged item
-      newOrder.splice(draggedIndex, 1);
-      
-      // Insert at target position
-      const newTargetIndex = newOrder.indexOf(targetIcao);
-      newOrder.splice(newTargetIndex, 0, draggedIcao);
-      
-      return newOrder;
-    });
+      // Immediately reorder the array for smooth visual feedback
+      setWeatherICAOs(prev => {
+        const newOrder = prev.filter(icao => icao !== draggedIcao);
+        const targetIndex = newOrder.indexOf(targetIcao);
+        
+        if (targetIndex === -1) return prev;
+        
+        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        newOrder.splice(insertIndex, 0, draggedIcao);
+        
+        return newOrder;
+      });
+    }
+  };
+
+  // Helper function to determine if a tile should show insertion space
+  const shouldShowInsertionSpace = (icao, position) => {
+    if (!dragInsertPosition || !draggedItem || icao === draggedItem) return false;
+    
+    if (position === 'before') {
+      return dragInsertPosition.targetIcao === icao && !dragInsertPosition.insertAfter;
+    } else if (position === 'after') {
+      return dragInsertPosition.targetIcao === icao && dragInsertPosition.insertAfter;
+    }
+    
+    return false;
   };
 
   return (
@@ -1028,21 +1057,32 @@ const WeatherMonitorApp = () => {
       {/* Weather Tiles Grid */}
       <div className="max-w-screen-2xl mx-auto px-6 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-          {weatherICAOs.map(icao => (
-            <WeatherTile 
-              key={icao}
-              icao={icao}
-              weatherMinima={weatherMinima}
-              globalWeatherMinima={globalWeatherMinima}
-              setWeatherMinima={handleSetWeatherMinima}
-              resetWeatherMinima={handleResetWeatherMinima}
-              removeWeatherICAO={handleRemoveWeatherICAO}
-              globalMinimized={globalWeatherMinimized}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onReorder={handleReorder}
-              draggedItem={draggedItem}
-            />
+          {weatherICAOs.map((icao, index) => (
+            <div key={`${icao}-container`} className="relative">
+              {/* Insertion space indicator before */}
+              {shouldShowInsertionSpace(icao, 'before') && (
+                <div className="absolute -left-3 top-0 bottom-0 w-1 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
+              )}
+              
+              <WeatherTile 
+                icao={icao}
+                weatherMinima={weatherMinima}
+                globalWeatherMinima={globalWeatherMinima}
+                setWeatherMinima={handleSetWeatherMinima}
+                resetWeatherMinima={handleResetWeatherMinima}
+                removeWeatherICAO={handleRemoveWeatherICAO}
+                globalMinimized={globalWeatherMinimized}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onReorder={handleReorder}
+                draggedItem={draggedItem}
+              />
+              
+              {/* Insertion space indicator after */}
+              {shouldShowInsertionSpace(icao, 'after') && (
+                <div className="absolute -right-3 top-0 bottom-0 w-1 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50" />
+              )}
+            </div>
           ))}
         </div>
         
