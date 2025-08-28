@@ -1,5 +1,5 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: fallback to NAV CANADA CFPS when FAA returns no NOTAMs for Canadian ICAOs
+// Updated: more robust NAV CANADA CFPS fallback parsing when FAA returns no NOTAMs for Canadian ICAOs
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -109,60 +109,165 @@ export default async function handler(req, res) {
             let navData = null;
             const rawText = await navResp.text();
 
-            try {
-              navData = JSON.parse(rawText);
-            } catch (e) {
-              // Not JSON — attempt to extract JSON blob from HTML or fallback to returning raw text as a single NOTAM
-              // Common NAV CANADA responses are JSON, but guard against HTML
-              console.warn('[API] NAV CANADA response is not JSON; will attempt simple scraping fallback');
-            }
+            // Helper: attempt JSON.parse safely
+            const tryParseJSON = (text) => {
+              try {
+                return JSON.parse(text);
+              } catch (e) {
+                return null;
+              }
+            };
 
-            const navItems = [];
+            // Helper: try to extract a JSON substring that contains likely CFPS keys
+            const extractJSONBlob = (text) => {
+              // Look for an object or array that contains "Alpha" or "notam" or "raw" keys
+              const keyCandidates = ['"Alpha"', '"alpha"', '"notam"', '"notams"', '"raw"', '"english"'];
+              // quick check: if text already contains one of the keys and is valid JSON, just parse it
+              const direct = tryParseJSON(text);
+              if (direct) return direct;
 
-            if (navData) {
-              // Attempt to normalize common shapes
-              // Possible shapes: array of objects, { notam: [...] }, { Alpha: [...] }, etc.
-              if (Array.isArray(navData)) {
-                navData.forEach(it => navItems.push(it));
-              } else if (navData.notam && Array.isArray(navData.notam)) {
-                navData.notam.forEach(it => navItems.push(it));
-              } else if (navData.Alpha && Array.isArray(navData.Alpha)) {
-                navData.Alpha.forEach(it => navItems.push(it));
-              } else {
-                // attempt to find array values in object
-                const arrays = Object.values(navData).filter(v => Array.isArray(v) && v.length > 0);
-                if (arrays.length > 0) {
-                  arrays[0].forEach(it => navItems.push(it));
-                } else {
-                  // last resort: treat the object itself as one item
-                  navItems.push(navData);
+              // Attempt to find substring bounded by braces that contains a candidate key
+              for (const key of keyCandidates) {
+                const idx = text.indexOf(key);
+                if (idx !== -1) {
+                  // find opening brace before idx
+                  const before = text.slice(0, idx);
+                  const openIdx = before.lastIndexOf('{');
+                  const arrOpenIdx = before.lastIndexOf('[');
+                  const start = Math.max(openIdx, arrOpenIdx);
+                  if (start === -1) continue;
+                  // find a closing brace after idx
+                  const after = text.slice(idx);
+                  const closeIdxObj = text.indexOf('}', idx);
+                  const closeIdxArr = text.indexOf(']', idx);
+                  const end = Math.max(closeIdxObj, closeIdxArr);
+                  if (end === -1) continue;
+                  const candidate = text.slice(start, end + 1);
+                  const parsed = tryParseJSON(candidate);
+                  if (parsed) return parsed;
                 }
               }
 
+              // As a last attempt, try to unescape double-encoded JSON inside a string
+              const doubleQuotedJsonMatch = text.match(/"(\{(?:[^"\\]|\\.)*\})"/s);
+              if (doubleQuotedJsonMatch) {
+                const unescaped = doubleQuotedJsonMatch[1].replace(/\\"/g, '"');
+                const parsed = tryParseJSON(unescaped);
+                if (parsed) return parsed;
+              }
+
+              return null;
+            };
+
+            // Try parse rawText, fallback to extraction heuristics
+            navData = tryParseJSON(rawText) || extractJSONBlob(rawText);
+
+            const navItems = [];
+
+            const pushNavItem = (it) => {
+              if (!it) return;
+              // If it wraps fields under 'item' or similar arrays, unwrap common wrappers
+              navItems.push(it);
+            };
+
+            if (navData) {
+              // Normalize structures: arrays, wrappers (notam, Alpha, Alpha.Notam list, etc.)
+              if (Array.isArray(navData)) {
+                navData.forEach(it => pushNavItem(it));
+              } else {
+                // Known wrapper keys to inspect (in order)
+                const wrapperKeys = ['Alpha', 'alpha', 'notam', 'notams', 'NOTAM', 'NOTAMS', 'data', 'results', 'items', 'features'];
+                let found = false;
+                for (const k of wrapperKeys) {
+                  if (navData[k]) {
+                    if (Array.isArray(navData[k])) {
+                      navData[k].forEach(it => pushNavItem(it));
+                    } else if (typeof navData[k] === 'object') {
+                      // some structures are { Alpha: { ... } } or { Alpha: [{...}] }
+                      if (Array.isArray(navData[k].Alpha)) {
+                        navData[k].Alpha.forEach(it => pushNavItem(it));
+                      } else {
+                        pushNavItem(navData[k]);
+                      }
+                    }
+                    found = true;
+                    break;
+                  }
+                }
+                if (!found) {
+                  // If object already looks like a NOTAM entry with keys like raw/english, push it
+                  const likelyNotam = ['raw','english','notam','text','body','description'];
+                  const hasLikely = Object.keys(navData).some(k => likelyNotam.includes(k.toLowerCase()));
+                  if (hasLikely) {
+                    pushNavItem(navData);
+                  } else {
+                    // find the first array value in the object
+                    const arrays = Object.values(navData).filter(v => Array.isArray(v) && v.length > 0);
+                    if (arrays.length > 0) {
+                      arrays[0].forEach(it => pushNavItem(it));
+                    } else {
+                      // last resort: treat the object itself as a single item
+                      pushNavItem(navData);
+                    }
+                  }
+                }
+              }
+
+              // Map navItems to normalized parsed entries
               navItems.forEach(it => {
-                // Try to extract text fields from common keys
-                const body = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
-                const number = it.id || it.notamId || it.number || '';
-                const validFrom = it.start || it.begin || it.validFrom || '';
-                const validTo = it.end || it.finish || it.validTo || '';
-                const location = it.site || it.siteCode || upicao;
+                // prefer fields in order of likelihood
+                // CFPS often uses fields like: raw, english, notam, text, description
+                const getStr = (obj, keys) => {
+                  for (const k of keys) {
+                    if (!obj) continue;
+                    if (obj[k] && typeof obj[k] === 'string') return obj[k];
+                    // some values can be nested under obj[k].english etc
+                    if (obj[k] && typeof obj[k] === 'object') {
+                      // try common nested fields
+                      if (typeof obj[k].english === 'string') return obj[k].english;
+                      if (typeof obj[k].raw === 'string') return obj[k].raw;
+                    }
+                  }
+                  return '';
+                };
+
+                const raw = getStr(it, ['raw', 'english', 'notam', 'text', 'body', 'description', 'rawText']);
+                const number = (it.id || it.notamId || it.number || it.noticeNumber || it.noticeid || it.header || '') + '';
+                const validFrom = it.start || it.begin || it.validFrom || it.from || '';
+                const validTo = it.end || it.finish || it.validTo || it.to || '';
+                const location = it.site || it.siteCode || it.location || it.aerodrome || upicao;
+                const qLine = it.q || it.qLine || '';
 
                 parsed.push({
-                  number,
-                  type: it.type || '',
-                  classification: it.classification || '',
+                  number: number || (location ? `${location}-NAVCAN-${parsed.length+1}` : `${upicao}-NAVCAN-${parsed.length+1}`),
+                  type: it.type || it.category || '',
+                  classification: it.classification || it.priority || '',
                   icao: location || upicao,
                   location: location || upicao,
-                  validFrom,
-                  validTo,
-                  summary: (typeof body === 'string' ? (body.split('\n')[0] || body) : ''),
-                  body: typeof body === 'string' ? body : JSON.stringify(body),
-                  qLine: it.qLine || ''
+                  validFrom: validFrom || '',
+                  validTo: validTo || '',
+                  summary: typeof raw === 'string' ? (raw.split('\n')[0] || raw) : '',
+                  body: typeof raw === 'string' ? raw : JSON.stringify(raw),
+                  qLine: qLine || ''
                 });
               });
             } else {
-              // navData was not JSON — use raw text fallback: try to find blocks separated by double newlines
-              const chunks = rawText.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+              // navData was not JSON — use raw text fallback: try to extract NOTAM blocks in plain text/HTML
+              // Remove surrounding HTML tags but keep plaintext inside <pre> if present
+              let cleaned = rawText;
+              // Attempt to extract <pre> blocks (CFPS sometimes returns HTML with <pre>)
+              const preMatch = cleaned.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+              if (preMatch && preMatch[1]) {
+                cleaned = preMatch[1];
+              } else {
+                // Strip tags conservatively
+                cleaned = cleaned.replace(/<\/?[^>]+(>|$)/g, '\n');
+              }
+
+              // Replace multiple escaped newline tokens
+              cleaned = cleaned.replace(/\\n/g, '\n').replace(/\r/g, '\n');
+
+              const chunks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
               if (chunks.length > 0) {
                 chunks.forEach((chunk, idx) => {
                   parsed.push({
@@ -177,6 +282,19 @@ export default async function handler(req, res) {
                     body: chunk,
                     qLine: ''
                   });
+                });
+              } else if (cleaned.trim()) {
+                parsed.push({
+                  number: `${upicao}-NAVCAN-1`,
+                  type: '',
+                  classification: '',
+                  icao: upicao,
+                  location: upicao,
+                  validFrom: '',
+                  validTo: '',
+                  summary: cleaned.split('\n')[0] || '',
+                  body: cleaned,
+                  qLine: ''
                 });
               }
             }
