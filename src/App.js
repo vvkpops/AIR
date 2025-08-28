@@ -953,8 +953,11 @@ const WeatherTile = ({
     // Use current color scheme for borders
     const currentColors = getCurrentColors();
     
-    if (tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled) {
-      // Map text colors to appropriate border colors
+    // Check if TAF contains the current scheme's below-minima color class
+    const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+    
+    if (hasBelowMinimaConditions) {
+      // Map text colors to appropriate border colors for BELOW minima
       switch (currentColors.belowMinima) {
         case 'text-red-400':
         case 'text-red-500':
@@ -1045,7 +1048,10 @@ const WeatherTile = ({
               
               const currentColors = getCurrentColors();
               
-              if (tafHtml && tafHtml.includes("text-red-400") && minimaFilterEnabled) {
+              // Check if TAF contains the current scheme's below-minima color class
+              const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+              
+              if (hasBelowMinimaConditions) {
                 // Below minima colors
                 switch (currentColors.belowMinima) {
                   case 'text-red-400':
