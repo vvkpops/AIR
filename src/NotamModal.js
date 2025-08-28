@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
+  const scrollPositionRef = useRef(0);
 
   // Handle click outside to close
   useEffect(() => {
@@ -13,13 +14,26 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     };
 
     if (isOpen) {
+      // Store current scroll position before applying modal-open
+      scrollPositionRef.current = window.pageYOffset || document.documentElement.scrollTop;
+      
       document.addEventListener('mousedown', handleClickOutside);
       document.body.classList.add('modal-open');
+      
+      // Apply the stored scroll position to the fixed body
+      document.body.style.top = `-${scrollPositionRef.current}px`;
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.body.classList.remove('modal-open');
+      
+      if (isOpen) {
+        document.body.classList.remove('modal-open');
+        document.body.style.top = '';
+        
+        // Restore scroll position
+        window.scrollTo(0, scrollPositionRef.current);
+      }
     };
   }, [isOpen, onClose]);
 
