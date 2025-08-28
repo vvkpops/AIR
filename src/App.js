@@ -860,10 +860,9 @@ const WeatherMonitorApp = () => {
     }
   });
 
-  // Drag state with insertion position tracking and smooth transitions
+  // Drag state with insertion position tracking
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragInsertPosition, setDragInsertPosition] = useState(null);
-  const [isReordering, setIsReordering] = useState(false);
   
   const icaoInputRef = useRef(null);
 
@@ -974,23 +973,19 @@ const WeatherMonitorApp = () => {
         dragInsertPosition.targetIcao !== newInsertPosition.targetIcao || 
         dragInsertPosition.insertAfter !== newInsertPosition.insertAfter) {
       setDragInsertPosition(newInsertPosition);
-      setIsReordering(true);
       
-      // Delay the actual reordering to allow for smooth visual transitions
-      setTimeout(() => {
-        setWeatherICAOs(prev => {
-          const newOrder = prev.filter(icao => icao !== draggedIcao);
-          const targetIndex = newOrder.indexOf(targetIcao);
-          
-          if (targetIndex === -1) return prev;
-          
-          const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
-          newOrder.splice(insertIndex, 0, draggedIcao);
-          
-          return newOrder;
-        });
-        setIsReordering(false);
-      }, 150); // Short delay for smooth animation
+      // Immediately reorder the array for smooth visual feedback
+      setWeatherICAOs(prev => {
+        const newOrder = prev.filter(icao => icao !== draggedIcao);
+        const targetIndex = newOrder.indexOf(targetIcao);
+        
+        if (targetIndex === -1) return prev;
+        
+        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        newOrder.splice(insertIndex, 0, draggedIcao);
+        
+        return newOrder;
+      });
     }
   };
 
@@ -1072,57 +1067,41 @@ const WeatherMonitorApp = () => {
         {/* Enhanced visual feedback replaces the need for instructions */}
       </div>
       
-      {/* Weather Tiles Grid with smooth transitions */}
+      {/* Weather Tiles Grid */}
       <div className="max-w-screen-2xl mx-auto px-6 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 transition-all duration-300 ease-out">
-          {weatherICAOs.map((icao, index) => {
-            const isDraggedCard = icao === draggedItem;
-            const shouldShift = draggedItem && !isDraggedCard && dragInsertPosition;
-            
-            return (
-              <div 
-                key={`${icao}-container`} 
-                className={`relative transition-all duration-300 ease-out transform-gpu
-                  ${isDraggedCard ? 'scale-95 opacity-30' : ''}
-                  ${shouldShift ? 'animate-[slideShift_0.3s_ease-out_forwards]' : ''}
-                  ${isReordering ? 'transition-all duration-500 ease-out' : ''}
-                `}
-                style={{
-                  transform: isDraggedCard ? 'scale(0.95)' : shouldShift ? 'translateX(8px) translateY(-2px)' : 'none',
-                  transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out',
-                }}
-              >
-                {/* Enhanced insertion space indicator before */}
-                {shouldShowInsertionSpace(icao, 'before') && (
-                  <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
-                )}
-                
-                {/* Drop zone overlay with enhanced effects */}
-                {draggedItem && icao !== draggedItem && (
-                  <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/40 bg-gradient-to-br from-cyan-400/10 to-blue-400/10 opacity-0 hover:opacity-100 transition-all duration-200 pointer-events-none backdrop-blur-sm animate-[breathe_2s_ease-in-out_infinite]" />
-                )}
-                
-                <WeatherTile 
-                  icao={icao}
-                  weatherMinima={weatherMinima}
-                  globalWeatherMinima={globalWeatherMinima}
-                  setWeatherMinima={handleSetWeatherMinima}
-                  resetWeatherMinima={handleResetWeatherMinima}
-                  removeWeatherICAO={handleRemoveWeatherICAO}
-                  globalMinimized={globalWeatherMinimized}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onReorder={handleReorder}
-                  draggedItem={draggedItem}
-                />
-                
-                {/* Enhanced insertion space indicator after */}
-                {shouldShowInsertionSpace(icao, 'after') && (
-                  <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
-                )}
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+          {weatherICAOs.map((icao, index) => (
+            <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
+              {/* Enhanced insertion space indicator before */}
+              {shouldShowInsertionSpace(icao, 'before') && (
+                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+              )}
+              
+              {/* Drop zone overlay for better visual feedback */}
+              {draggedItem && icao !== draggedItem && (
+                <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/30 bg-cyan-400/5 opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+              )}
+              
+              <WeatherTile 
+                icao={icao}
+                weatherMinima={weatherMinima}
+                globalWeatherMinima={globalWeatherMinima}
+                setWeatherMinima={handleSetWeatherMinima}
+                resetWeatherMinima={handleResetWeatherMinima}
+                removeWeatherICAO={handleRemoveWeatherICAO}
+                globalMinimized={globalWeatherMinimized}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onReorder={handleReorder}
+                draggedItem={draggedItem}
+              />
+              
+              {/* Enhanced insertion space indicator after */}
+              {shouldShowInsertionSpace(icao, 'after') && (
+                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+              )}
+            </div>
+          ))}
         </div>
         
         {weatherICAOs.length === 0 && (
