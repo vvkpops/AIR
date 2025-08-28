@@ -135,6 +135,27 @@ function parseLine(line) {
   return { ceiling, visMiles, isGreater, isLess };
 }
 
+// Enhanced METAR highlighting function with color customization and filter toggle
+function highlightMETARWithOptions(raw, minC, minV, filterEnabled, colorScheme) {
+  const colors = COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
+  
+  if (!raw || typeof raw !== 'string') {
+    return '';
+  }
+
+  const p = parseLine(raw);
+  const visOk = p.isGreater ? true : (p.visMiles >= minV);
+  const ceilOk = p.ceiling >= minC;
+  const meetsMinima = visOk && ceilOk;
+  
+  // If filter is disabled, use base METAR color
+  if (!filterEnabled) {
+    return raw;
+  }
+  
+  // If filter is enabled, check if it meets minima
+  return meetsMinima ? raw : raw; // We'll handle coloring in the component
+}
 // Enhanced TAF highlighting function with color customization and filter toggle
 function highlightTAFWithOptions(raw, minC, minV, filterEnabled, colorScheme) {
   const colors = COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
@@ -352,7 +373,9 @@ const SettingsPanel = ({
   customColors,
   setCustomColors,
   borderColoringEnabled,
-  setBorderColoringEnabled
+  setBorderColoringEnabled,
+  metarFilterEnabled,
+  setMetarFilterEnabled
 }) => {
   const modalRef = useRef(null);
 
@@ -398,7 +421,9 @@ const SettingsPanel = ({
         <div className="modal-body-scrollable p-6 space-y-6">
           {/* Minima Filter Toggle */}
           <div className="bg-gray-900 rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filter</h4>
+            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filters</h4>
+            
+            {/* TAF Filter */}
             <div className="flex items-center gap-3 mb-4">
               <label className="inline-flex items-center cursor-pointer">
                 <input
@@ -415,7 +440,29 @@ const SettingsPanel = ({
                   }`} />
                 </div>
                 <span className="ml-3 text-gray-300">
-                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code weather text based on minima
+                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code TAF text based on minima
+                </span>
+              </label>
+            </div>
+
+            {/* METAR Filter */}
+            <div className="flex items-center gap-3 mb-4">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={metarFilterEnabled}
+                  onChange={(e) => setMetarFilterEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
+                  metarFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
+                }`}>
+                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
+                    metarFilterEnabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </div>
+                <span className="ml-3 text-gray-300">
+                  {metarFilterEnabled ? 'ON' : 'OFF'} - Color code METAR text based on minima
                 </span>
               </label>
             </div>
@@ -444,9 +491,15 @@ const SettingsPanel = ({
             
             <div className="mt-3 text-sm text-gray-400 space-y-1">
               <p>
-                <strong>Text Filter:</strong> {minimaFilterEnabled 
-                  ? 'Weather conditions below minima will be highlighted in warning colors'
-                  : 'All weather text will use the same base color regardless of conditions'
+                <strong>TAF Filter:</strong> {minimaFilterEnabled 
+                  ? 'TAF lines below minima will be highlighted in warning colors'
+                  : 'All TAF text will use the same base color regardless of conditions'
+                }
+              </p>
+              <p>
+                <strong>METAR Filter:</strong> {metarFilterEnabled 
+                  ? 'METAR text below minima will be highlighted in warning colors'
+                  : 'METAR text will use the base color regardless of conditions'
                 }
               </p>
               <p>
@@ -645,7 +698,8 @@ const WeatherTile = ({
   minimaFilterEnabled,
   colorScheme,
   customColors,
-  borderColoringEnabled
+  borderColoringEnabled,
+  metarFilterEnabled
 }) => {
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
@@ -706,7 +760,23 @@ const WeatherTile = ({
     fetchData();
     const intervalId = setInterval(fetchData, 300000);
     return () => clearInterval(intervalId);
-  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme]);
+  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme, metarFilterEnabled]);
+
+  // Function to get METAR color class based on conditions
+  const getMETARColorClass = () => {
+    if (!metarFilterEnabled) {
+      return getCurrentColors().metar; // Use base METAR color when filter is off
+    }
+    
+    // Parse METAR to check if it meets minima
+    const p = parseLine(metarRaw);
+    const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
+    const ceilOk = p.ceiling >= min.ceiling;
+    const meetsMinima = visOk && ceilOk;
+    
+    const currentColors = getCurrentColors();
+    return meetsMinima ? currentColors.aboveMinima : currentColors.belowMinima;
+  };
 
   // Update custom colors in COLOR_PRESETS when customColors change
   useEffect(() => {
@@ -1212,7 +1282,9 @@ const WeatherTile = ({
             {metarRaw && (
               <div className="mt-2 text-xs text-gray-300">
                 <strong className="text-cyan-400">METAR:</strong> 
-                <div className={`mt-1 bg-gray-900 p-2 rounded font-mono ${currentColors.metar}`}>{metarRaw}</div>
+                <div className={`mt-1 bg-gray-900 p-2 rounded font-mono ${getMETARColorClass()}`}>
+                  {metarRaw}
+                </div>
               </div>
             )}
             
@@ -1292,6 +1364,13 @@ const WeatherMonitorApp = () => {
     }
   });
 
+  const [metarFilterEnabled, setMetarFilterEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("metarFilterEnabled") || "false");
+    } catch (e) {
+      return false;
+    }
+  });
   const [borderColoringEnabled, setBorderColoringEnabled] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("borderColoringEnabled") || "true");
@@ -1358,6 +1437,12 @@ const WeatherMonitorApp = () => {
       localStorage.setItem("minimaFilterEnabled", JSON.stringify(minimaFilterEnabled));
     } catch (e) {}
   }, [minimaFilterEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("metarFilterEnabled", JSON.stringify(metarFilterEnabled));
+    } catch (e) {}
+  }, [metarFilterEnabled]);
 
   useEffect(() => {
     try {
@@ -1569,11 +1654,17 @@ const WeatherMonitorApp = () => {
 
           {/* Filter Status Indicator */}
           <div className="flex items-center gap-2 ml-4 text-sm">
-            <span className="text-gray-400">Text:</span>
+            <span className="text-gray-400">TAF:</span>
             <span className={`px-2 py-1 rounded text-xs font-medium ${
               minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {minimaFilterEnabled ? 'ON' : 'OFF'}
+            </span>
+            <span className="text-gray-400">METAR:</span>
+            <span className={`px-2 py-1 rounded text-xs font-medium ${
+              metarFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {metarFilterEnabled ? 'ON' : 'OFF'}
             </span>
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">Borders:</span>
@@ -1622,6 +1713,7 @@ const WeatherMonitorApp = () => {
                 colorScheme={colorScheme}
                 customColors={customColors}
                 borderColoringEnabled={borderColoringEnabled}
+                metarFilterEnabled={metarFilterEnabled}
               />
               
               {/* Enhanced insertion space indicator after */}
@@ -1662,6 +1754,8 @@ const WeatherMonitorApp = () => {
         setCustomColors={setCustomColors}
         borderColoringEnabled={borderColoringEnabled}
         setBorderColoringEnabled={setBorderColoringEnabled}
+        metarFilterEnabled={metarFilterEnabled}
+        setMetarFilterEnabled={setMetarFilterEnabled}
       />
     </div>
   );
