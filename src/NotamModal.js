@@ -66,17 +66,33 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const cleanNotamText = (rawText) => {
     if (!rawText || typeof rawText !== 'string') return rawText;
     
-    // If this looks like raw JSON CFPS response, extract the actual NOTAM text
-    if (rawText.includes('{"raw"') || rawText.startsWith('{')) {
+    // If this looks like the CFPS JSON response format, extract the actual NOTAM text
+    if (rawText.includes('"raw"') && rawText.includes('"english"')) {
       try {
         const jsonData = JSON.parse(rawText);
+        // Use the raw field which contains the actual NOTAM text
         if (jsonData.raw) {
           rawText = jsonData.raw;
+        } else if (jsonData.english) {
+          rawText = jsonData.english;
         }
       } catch (e) {
-        // Not JSON, continue with original text
+        // If parsing fails, try to extract the raw text manually
+        const rawMatch = rawText.match(/"raw"\s*:\s*"([^"]+)"/);
+        if (rawMatch) {
+          rawText = rawMatch[1];
+        } else {
+          const englishMatch = rawText.match(/"english"\s*:\s*"([^"]+)"/);
+          if (englishMatch) {
+            rawText = englishMatch[1];
+          }
+        }
       }
     }
+    
+    // Now parse the actual NOTAM text to extract individual NOTAMs
+    // Replace \n in the string with actual newlines
+    rawText = rawText.replace(/\\n/g, '\n');
     
     // Find NOTAM blocks that start with NOTAM identifier and end after E) section
     const notamBlocks = [];
@@ -86,8 +102,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       
-      // Check if this line starts a new NOTAM (contains NOTAM identifier pattern)
-      if (line.match(/^\(?[A-Z]\d+\/\d+\s+NOTAM/) || line.includes('NOTAM')) {
+      // Check if this line starts a new NOTAM (pattern like "Q1101/25 NOTAMN" or similar)
+      if (line.match(/^[A-Z]\d+\/\d+\s+NOTAM/) || (line.includes('NOTAM') && line.match(/\d+\/\d+/))) {
         // Save previous block if it exists
         if (currentBlock.length > 0) {
           notamBlocks.push(currentBlock.join('\n'));
@@ -99,9 +115,9 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
         currentBlock.push(line);
         
         // Check if this is the end of E) section
-        if (line.match(/^E\)/)) {
+        if (line.match(/^E\)\s/)) {
           // Look ahead to see if next line is empty or starts a new NOTAM
-          if (i + 1 >= lines.length || lines[i + 1].trim() === '' || lines[i + 1].match(/^\(?[A-Z]\d+\/\d+\s+NOTAM/)) {
+          if (i + 1 >= lines.length || lines[i + 1].trim() === '' || lines[i + 1].match(/^[A-Z]\d+\/\d+\s+NOTAM/)) {
             // End current block here
             notamBlocks.push(currentBlock.join('\n'));
             currentBlock = [];
@@ -115,8 +131,13 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       notamBlocks.push(currentBlock.join('\n'));
     }
     
-    // Return the first clean NOTAM block if found, otherwise return original
-    return notamBlocks.length > 0 ? notamBlocks[0] : rawText;
+    // If we found NOTAM blocks, return them all joined with double newlines
+    // Otherwise return the cleaned text
+    if (notamBlocks.length > 0) {
+      return notamBlocks.join('\n\n');
+    }
+    
+    return rawText;
   };
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not specified';
