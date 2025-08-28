@@ -15,25 +15,26 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
 
     if (isOpen) {
       // Store current scroll position before applying modal-open
-      scrollPositionRef.current = window.pageYOffset || document.documentElement.scrollTop;
+      scrollPositionRef.current = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
       
       document.addEventListener('mousedown', handleClickOutside);
       document.body.classList.add('modal-open');
       
       // Apply the stored scroll position to the fixed body
       document.body.style.top = `-${scrollPositionRef.current}px`;
+    } else {
+      // Clean up when modal closes
+      document.body.classList.remove('modal-open');
+      document.body.style.top = '';
+      
+      // Restore scroll position with a small delay to ensure DOM is ready
+      requestAnimationFrame(() => {
+        window.scrollTo(0, scrollPositionRef.current);
+      });
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      
-      if (isOpen) {
-        document.body.classList.remove('modal-open');
-        document.body.style.top = '';
-        
-        // Restore scroll position
-        window.scrollTo(0, scrollPositionRef.current);
-      }
     };
   }, [isOpen, onClose]);
 
