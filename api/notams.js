@@ -1,5 +1,9 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: more robust NAV CANADA CFPS fallback parsing when FAA returns no NOTAMs for Canadian ICAOs
+// Improved NAV CANADA CFPS fallback parsing:
+// - Detects and parses JSON strings embedded in summary/body (including double-escaped JSON)
+// - Prefer 'english' then 'raw' text when available
+// - Unescapes "\n" sequences into real newlines
+// - Preserves FAA path unchanged; CFPS parsing only used as fallback for Canadian ICAOs
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -120,24 +124,18 @@ export default async function handler(req, res) {
 
             // Helper: try to extract a JSON substring that contains likely CFPS keys
             const extractJSONBlob = (text) => {
-              // Look for an object or array that contains "Alpha" or "notam" or "raw" keys
               const keyCandidates = ['"Alpha"', '"alpha"', '"notam"', '"notams"', '"raw"', '"english"'];
-              // quick check: if text already contains one of the keys and is valid JSON, just parse it
               const direct = tryParseJSON(text);
               if (direct) return direct;
 
-              // Attempt to find substring bounded by braces that contains a candidate key
               for (const key of keyCandidates) {
                 const idx = text.indexOf(key);
                 if (idx !== -1) {
-                  // find opening brace before idx
                   const before = text.slice(0, idx);
                   const openIdx = before.lastIndexOf('{');
                   const arrOpenIdx = before.lastIndexOf('[');
                   const start = Math.max(openIdx, arrOpenIdx);
                   if (start === -1) continue;
-                  // find a closing brace after idx
-                  const after = text.slice(idx);
                   const closeIdxObj = text.indexOf('}', idx);
                   const closeIdxArr = text.indexOf(']', idx);
                   const end = Math.max(closeIdxObj, closeIdxArr);
@@ -148,7 +146,7 @@ export default async function handler(req, res) {
                 }
               }
 
-              // As a last attempt, try to unescape double-encoded JSON inside a string
+              // double-encoded JSON inside a string
               const doubleQuotedJsonMatch = text.match(/"(\{(?:[^"\\]|\\.)*\})"/s);
               if (doubleQuotedJsonMatch) {
                 const unescaped = doubleQuotedJsonMatch[1].replace(/\\"/g, '"');
@@ -166,16 +164,14 @@ export default async function handler(req, res) {
 
             const pushNavItem = (it) => {
               if (!it) return;
-              // If it wraps fields under 'item' or similar arrays, unwrap common wrappers
               navItems.push(it);
             };
 
             if (navData) {
-              // Normalize structures: arrays, wrappers (notam, Alpha, Alpha.Notam list, etc.)
+              // Normalize structures: arrays, wrappers (notam, Alpha, etc.)
               if (Array.isArray(navData)) {
                 navData.forEach(it => pushNavItem(it));
               } else {
-                // Known wrapper keys to inspect (in order)
                 const wrapperKeys = ['Alpha', 'alpha', 'notam', 'notams', 'NOTAM', 'NOTAMS', 'data', 'results', 'items', 'features'];
                 let found = false;
                 for (const k of wrapperKeys) {
@@ -184,10 +180,11 @@ export default async function handler(req, res) {
                       navData[k].forEach(it => pushNavItem(it));
                     } else if (typeof navData[k] === 'object') {
                       // some structures are { Alpha: { ... } } or { Alpha: [{...}] }
-                      if (Array.isArray(navData[k].Alpha)) {
-                        navData[k].Alpha.forEach(it => pushNavItem(it));
+                      const inner = navData[k];
+                      if (Array.isArray(inner)) {
+                        inner.forEach(it => pushNavItem(it));
                       } else {
-                        pushNavItem(navData[k]);
+                        pushNavItem(inner);
                       }
                     }
                     found = true;
@@ -195,76 +192,124 @@ export default async function handler(req, res) {
                   }
                 }
                 if (!found) {
-                  // If object already looks like a NOTAM entry with keys like raw/english, push it
                   const likelyNotam = ['raw','english','notam','text','body','description'];
-                  const hasLikely = Object.keys(navData).some(k => likelyNotam.includes(k.toLowerCase()));
+                  const hasLikely = Object.keys(navData || {}).some(k => likelyNotam.includes(k.toLowerCase()));
                   if (hasLikely) {
                     pushNavItem(navData);
                   } else {
-                    // find the first array value in the object
-                    const arrays = Object.values(navData).filter(v => Array.isArray(v) && v.length > 0);
+                    const arrays = Object.values(navData || {}).filter(v => Array.isArray(v) && v.length > 0);
                     if (arrays.length > 0) {
                       arrays[0].forEach(it => pushNavItem(it));
                     } else {
-                      // last resort: treat the object itself as a single item
                       pushNavItem(navData);
                     }
                   }
                 }
               }
 
+              // Helper: robustly extract text from various shapes (string JSON, object, etc.)
+              const extractTextFromValue = (val) => {
+                if (!val && val !== 0) return '';
+                // If object, prefer english/raw/body/text fields
+                if (typeof val === 'object') {
+                  if (typeof val.english === 'string' && val.english.trim()) return val.english.replace(/\\n/g, '\n');
+                  if (typeof val.raw === 'string' && val.raw.trim()) return val.raw.replace(/\\n/g, '\n');
+                  if (typeof val.body === 'string' && val.body.trim()) return val.body.replace(/\\n/g, '\n');
+                  if (typeof val.text === 'string' && val.text.trim()) return val.text.replace(/\\n/g, '\n');
+                  // fallback to JSON string
+                  try { return JSON.stringify(val); } catch (e) { return String(val); }
+                }
+
+                // If string, detect JSON-like string (possibly double-escaped)
+                if (typeof val === 'string') {
+                  let s = val.trim();
+
+                  // If it looks like a JSON object or array, try to parse
+                  if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+                    const p = tryParseJSON(s);
+                    if (p) return extractTextFromValue(p);
+                  }
+
+                  // If it's a quoted JSON inside a string (common double-encoded), unescape then parse
+                  // Remove wrapping quotes (e.g. "\"{...}\"")
+                  if (s.startsWith('"') && s.endsWith('"')) {
+                    s = s.slice(1, -1);
+                    s = s.replace(/\\"/g, '"');
+                    const p2 = tryParseJSON(s);
+                    if (p2) return extractTextFromValue(p2);
+                  }
+
+                  // Try to find JSON-like substring
+                  const jsonSubstringMatch = s.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                  if (jsonSubstringMatch) {
+                    const candidate = jsonSubstringMatch[1];
+                    const p3 = tryParseJSON(candidate);
+                    if (p3) return extractTextFromValue(p3);
+                  }
+
+                  // If string contains keys like "raw" or "english" but isn't strict JSON, attempt manual extraction
+                  // e.g. "\"raw\" : \"(...\\n...)\""
+                  const rawMatch = s.match(/"raw"\s*:\s*"([\s\S]*?)"/);
+                  if (rawMatch) return rawMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                  const engMatch = s.match(/"english"\s*:\s*"([\s\S]*?)"/);
+                  if (engMatch) return engMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+
+                  // Replace escaped newlines and escaped quotes, return
+                  return s.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                }
+
+                // Fallback to string
+                return String(val);
+              };
+
               // Map navItems to normalized parsed entries
               navItems.forEach(it => {
-                // prefer fields in order of likelihood
-                // CFPS often uses fields like: raw, english, notam, text, description
-                const getStr = (obj, keys) => {
-                  for (const k of keys) {
-                    if (!obj) continue;
-                    if (obj[k] && typeof obj[k] === 'string') return obj[k];
-                    // some values can be nested under obj[k].english etc
-                    if (obj[k] && typeof obj[k] === 'object') {
-                      // try common nested fields
-                      if (typeof obj[k].english === 'string') return obj[k].english;
-                      if (typeof obj[k].raw === 'string') return obj[k].raw;
-                    }
-                  }
-                  return '';
-                };
+                // choose candidate fields (body preferred, then summary, then raw/english)
+                const candidateField = it.body || it.summary || it.raw || it.english || it.text || it.description || it.rawText || it.notam || it.notice || '';
+                const fullText = extractTextFromValue(candidateField);
 
-                const raw = getStr(it, ['raw', 'english', 'notam', 'text', 'body', 'description', 'rawText']);
+                // Attempt to extract Q-line if present in object or text
+                let qLine = '';
+                if (it.qLine) qLine = it.qLine;
+                else if (it.q) qLine = it.q;
+                else {
+                  // try to extract Q) line from the fullText
+                  const qMatch = fullText.match(/(^|\n)\s*(Q\)[^\n]*)/i);
+                  if (qMatch) qLine = qMatch[2].trim();
+                }
+
                 const number = (it.id || it.notamId || it.number || it.noticeNumber || it.noticeid || it.header || '') + '';
-                const validFrom = it.start || it.begin || it.validFrom || it.from || '';
-                const validTo = it.end || it.finish || it.validTo || it.to || '';
+                const validFrom = it.start || it.begin || it.validFrom || it.from || it.b || it.B || '';
+                const validTo = it.end || it.finish || it.validTo || it.to || it.c || it.C || '';
                 const location = it.site || it.siteCode || it.location || it.aerodrome || upicao;
-                const qLine = it.q || it.qLine || '';
+
+                const bodyText = fullText || '';
+                const summaryText = typeof bodyText === 'string' && bodyText.length ? bodyText.split('\n')[0] : '';
 
                 parsed.push({
                   number: number || (location ? `${location}-NAVCAN-${parsed.length+1}` : `${upicao}-NAVCAN-${parsed.length+1}`),
-                  type: it.type || it.category || '',
+                  type: it.type || it.category || 'notam',
                   classification: it.classification || it.priority || '',
                   icao: location || upicao,
                   location: location || upicao,
                   validFrom: validFrom || '',
                   validTo: validTo || '',
-                  summary: typeof raw === 'string' ? (raw.split('\n')[0] || raw) : '',
-                  body: typeof raw === 'string' ? raw : JSON.stringify(raw),
+                  summary: summaryText,
+                  body: bodyText,
+                  rawText: bodyText,
                   qLine: qLine || ''
                 });
               });
             } else {
               // navData was not JSON — use raw text fallback: try to extract NOTAM blocks in plain text/HTML
-              // Remove surrounding HTML tags but keep plaintext inside <pre> if present
               let cleaned = rawText;
-              // Attempt to extract <pre> blocks (CFPS sometimes returns HTML with <pre>)
               const preMatch = cleaned.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
               if (preMatch && preMatch[1]) {
                 cleaned = preMatch[1];
               } else {
-                // Strip tags conservatively
                 cleaned = cleaned.replace(/<\/?[^>]+(>|$)/g, '\n');
               }
 
-              // Replace multiple escaped newline tokens
               cleaned = cleaned.replace(/\\n/g, '\n').replace(/\r/g, '\n');
 
               const chunks = cleaned.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
@@ -272,7 +317,7 @@ export default async function handler(req, res) {
                 chunks.forEach((chunk, idx) => {
                   parsed.push({
                     number: `${upicao}-NAVCAN-${idx+1}`,
-                    type: '',
+                    type: 'notam',
                     classification: '',
                     icao: upicao,
                     location: upicao,
@@ -280,13 +325,14 @@ export default async function handler(req, res) {
                     validTo: '',
                     summary: chunk.split('\n')[0] || '',
                     body: chunk,
+                    rawText: chunk,
                     qLine: ''
                   });
                 });
               } else if (cleaned.trim()) {
                 parsed.push({
                   number: `${upicao}-NAVCAN-1`,
-                  type: '',
+                  type: 'notam',
                   classification: '',
                   icao: upicao,
                   location: upicao,
@@ -294,6 +340,7 @@ export default async function handler(req, res) {
                   validTo: '',
                   summary: cleaned.split('\n')[0] || '',
                   body: cleaned,
+                  rawText: cleaned,
                   qLine: ''
                 });
               }
