@@ -790,7 +790,7 @@ const formatTime = (dateStr) => {
     )}
   </div>
 )}
-                      )}
+                     
                     </div>
                   </div>
                 );
