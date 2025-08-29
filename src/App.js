@@ -1,5 +1,5 @@
 // Complete App.js with draggable weather cards like iPhone icons
-// Enhanced with Minima Filter Toggle and Color Customization
+// Enhanced with Minima Filter Toggle, Color Customization, and ICAO Filter
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
@@ -830,8 +830,16 @@ const WeatherTile = ({
     onDragEnd();
   };
 
-  // Long press handling for touch devices
+  // Long press handling for touch devices - FIXED
   const handleTouchStart = (e) => {
+    // Don't start long press on interactive elements
+    if (e.target.tagName === 'INPUT' || 
+        e.target.tagName === 'BUTTON' || 
+        e.target.closest('input') || 
+        e.target.closest('button')) {
+      return;
+    }
+    
     longPressTimer.current = setTimeout(() => {
       setIsLongPressed(true);
       // Add haptic feedback if available
@@ -852,8 +860,15 @@ const WeatherTile = ({
     }
   };
 
-  // Mouse event handlers
+  // Mouse event handlers - FIXED
   const handleMouseDown = (e) => {
+    // Don't start drag if clicking on interactive elements
+    if (e.target.tagName === 'INPUT' || 
+        e.target.tagName === 'BUTTON' || 
+        e.target.closest('input') || 
+        e.target.closest('button')) {
+      return;
+    }
     handleDragStart(e, false);
   };
 
@@ -865,10 +880,21 @@ const WeatherTile = ({
     handleDragEnd();
   };
 
-  // Touch event handlers
+  // Touch event handlers - FIXED
   const handleTouchMove = (e) => {
     if (isLongPressed) {
       if (!isDragging) {
+        // Don't start drag if touching interactive elements
+        const touch = e.touches[0];
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (elementBelow && (
+          elementBelow.tagName === 'INPUT' || 
+          elementBelow.tagName === 'BUTTON' || 
+          elementBelow.closest('input') || 
+          elementBelow.closest('button')
+        )) {
+          return;
+        }
         handleDragStart(e, true);
       } else {
         handleDragMove(e, true);
@@ -1171,9 +1197,14 @@ const WeatherTile = ({
         onTouchEnd={handleTouchEnd}
         aria-live="polite"
       >
-        {/* Enhanced Remove button with better animations */}
+        {/* Enhanced Remove button with better animations - FIXED */}
         <button 
-          onClick={() => removeWeatherICAO(icao)} 
+          onClick={(e) => {
+            e.stopPropagation();
+            removeWeatherICAO(icao);
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           type="button" 
           className="absolute top-2 right-2 z-20 bg-gradient-to-br from-gray-900 to-gray-800 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-gradient-to-br hover:from-red-600 hover:to-red-700 hover:text-white hover:scale-110 transition-all duration-200 shadow-lg hover:shadow-red-500/25 backdrop-blur-sm"
           title={`Remove ${icao}`}
@@ -1184,9 +1215,14 @@ const WeatherTile = ({
           </svg>
         </button>
 
-        {/* Enhanced Minimize toggle with better styling */}
+        {/* Enhanced Minimize toggle with better styling - FIXED */}
         <button
-          onClick={globalMinimized ? undefined : toggleMinimize}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!globalMinimized) toggleMinimize();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           type="button"
           title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
           aria-pressed={effectiveMinimized}
@@ -1200,18 +1236,37 @@ const WeatherTile = ({
           </svg>
         </button>
 
-        {/* Enhanced Title with gradient text */}
-        <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
+        {/* Enhanced Title with gradient text and drag handle */}
+        <div className="flex items-center justify-center gap-2 relative">
+          {/* Drag handle */}
+          <div className="absolute left-0 top-0 bottom-0 flex items-center cursor-grab active:cursor-grabbing" title="Drag to reorder">
+            <svg width="12" height="16" viewBox="0 0 12 16" className="text-gray-500 hover:text-cyan-400 transition-colors">
+              <circle cx="2" cy="4" r="1.5" fill="currentColor" />
+              <circle cx="2" cy="8" r="1.5" fill="currentColor" />
+              <circle cx="2" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="6" cy="4" r="1.5" fill="currentColor" />
+              <circle cx="6" cy="8" r="1.5" fill="currentColor" />
+              <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="10" cy="4" r="1.5" fill="currentColor" />
+              <circle cx="10" cy="8" r="1.5" fill="currentColor" />
+              <circle cx="10" cy="12" r="1.5" fill="currentColor" />
+            </svg>
+          </div>
+          <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
+        </div>
 
-        {/* Minima controls with filter status indicator */}
-        <div className="flex gap-3 items-center mt-2 text-xs">
+        {/* Minima controls with filter status indicator - FIXED */}
+        <div className="flex gap-3 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
           <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
             Ceil: 
             <input 
               type="number" 
               value={min.ceiling}
-              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
+              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none"
               onChange={(e) => setWeatherMinima(icao, 'ceiling', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               aria-label={`${icao} ceiling minima`}
             />
           </label>
@@ -1221,8 +1276,11 @@ const WeatherTile = ({
               type="number" 
               step="0.1" 
               value={min.vis}
-              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white"
+              className="bg-gray-700 p-1 rounded w-20 text-center ml-1 text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none"
               onChange={(e) => setWeatherMinima(icao, 'vis', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               aria-label={`${icao} visibility minima`}
             />
           </label>
@@ -1230,7 +1288,12 @@ const WeatherTile = ({
             <span className="opacity-70 italic text-gray-400">(default)</span> : 
             <button 
               className="text-yellow-400 underline text-xs hover:text-yellow-200" 
-              onClick={() => resetWeatherMinima(icao)}
+              onClick={(e) => {
+                e.stopPropagation();
+                resetWeatherMinima(icao);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               aria-label={`Reset ${icao} minima`}
             >
               reset
@@ -1247,10 +1310,15 @@ const WeatherTile = ({
           </div>
         )}
 
-        {/* Enhanced NOTAM Button with modern styling */}
-        <div className="mt-2 flex justify-end">
+        {/* Enhanced NOTAM Button with modern styling - FIXED */}
+        <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={handleNotamClick}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNotamClick(e);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             className="bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-600 hover:border-gray-500 shadow-sm hover:shadow-md hover:scale-105 backdrop-blur-sm"
             title={`View NOTAMs for ${icao}`}
           >
@@ -1326,7 +1394,7 @@ const WeatherTile = ({
   );
 };
 
-// Main App Component with drag and drop functionality and new settings
+// Main App Component with drag and drop functionality, settings, and ICAO filter
 const WeatherMonitorApp = () => {
   // State variables
   const [globalWeatherMinima, setGlobalWeatherMinima] = useState(
@@ -1405,11 +1473,16 @@ const WeatherMonitorApp = () => {
 
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
 
+  // ICAO Filter state - NEW
+  const [icaoFilter, setIcaoFilter] = useState("");
+  const [showFilteredOnly, setShowFilteredOnly] = useState(false);
+
   // Drag state with insertion position tracking
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragInsertPosition, setDragInsertPosition] = useState(null);
   
   const icaoInputRef = useRef(null);
+  const filterInputRef = useRef(null); // NEW
 
   // Persist state to localStorage
   useEffect(() => {
@@ -1527,6 +1600,44 @@ const WeatherMonitorApp = () => {
     setGlobalWeatherMinimized(prev => !prev);
   };
 
+  // Filter functions - NEW
+  const getFilteredICAOs = () => {
+    if (!showFilteredOnly || !icaoFilter.trim()) {
+      return weatherICAOs;
+    }
+
+    const filterICAOs = icaoFilter
+      .toUpperCase()
+      .split(/[,\s]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (filterICAOs.length === 0) {
+      return weatherICAOs;
+    }
+
+    return weatherICAOs.filter(icao => 
+      filterICAOs.some(filterIcao => 
+        icao.includes(filterIcao) || filterIcao.includes(icao)
+      )
+    );
+  };
+
+  const handleToggleFilter = () => {
+    setShowFilteredOnly(prev => !prev);
+    if (!showFilteredOnly) {
+      // Focus the filter input when enabling filter mode
+      setTimeout(() => filterInputRef.current?.focus(), 100);
+    }
+  };
+
+  const handleClearFilter = () => {
+    setIcaoFilter("");
+    setShowFilteredOnly(false);
+  };
+
+  const filteredICAOs = getFilteredICAOs(); // NEW
+
   // Drag and drop handlers
   const handleDragStart = (icao) => {
     setDraggedItem(icao);
@@ -1626,7 +1737,7 @@ const WeatherMonitorApp = () => {
         </div>
       </div>
       
-      {/* ICAO Input and Controls */}
+      {/* ICAO Input and Controls - ENHANCED WITH FILTER */}
       <div className="max-w-screen-2xl mx-auto px-6 mb-6">
         <div className="flex flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
           <input 
@@ -1678,12 +1789,45 @@ const WeatherMonitorApp = () => {
             </span>
           </div>
         </div>
+
+        {/* ICAO Filter Controls - NEW SECTION */}
+        <div className="flex flex-wrap justify-center gap-2 items-center bg-gray-700 rounded-lg p-4">
+          <span className="text-cyan-300 font-semibold">
+            🔍 Filter: 
+          </span>
+          <input 
+            ref={filterInputRef}
+            value={icaoFilter}
+            onChange={(e) => setIcaoFilter(e.target.value)}
+            placeholder="Filter ICAOs (e.g. CY, JFK, EGLL)" 
+            className="bg-gray-800 p-2 rounded text-center w-64 text-white placeholder-gray-400 border border-gray-600 focus:border-cyan-400 focus:outline-none transition-colors"
+          />
+          <button 
+            onClick={handleToggleFilter} 
+            className={`px-4 py-2 rounded text-white transition-colors font-medium ${showFilteredOnly ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 hover:bg-gray-500'}`}
+            title={showFilteredOnly ? 'Show all stations' : 'Apply filter'}
+          >
+            {showFilteredOnly ? 'Filter Active' : 'Apply Filter'}
+          </button>
+          {(icaoFilter || showFilteredOnly) && (
+            <button 
+              onClick={handleClearFilter} 
+              className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-white transition-colors"
+              title="Clear filter and show all"
+            >
+              Clear
+            </button>
+          )}
+          <div className="text-sm text-gray-400">
+            Showing {filteredICAOs.length} of {weatherICAOs.length} stations
+          </div>
+        </div>
       </div>
       
-      {/* Weather Tiles Grid */}
+      {/* Weather Tiles Grid - UPDATED TO USE FILTERED ICAOs */}
       <div className="max-w-screen-2xl mx-auto px-6 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-          {weatherICAOs.map((icao, index) => (
+          {filteredICAOs.map((icao, index) => (
             <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
               {/* Enhanced insertion space indicator before */}
               {shouldShowInsertionSpace(icao, 'before') && (
@@ -1722,7 +1866,26 @@ const WeatherMonitorApp = () => {
           ))}
         </div>
         
-        {weatherICAOs.length === 0 && (
+        {/* UPDATED EMPTY STATE TO HANDLE FILTERS */}
+        {filteredICAOs.length === 0 && weatherICAOs.length > 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-lg mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+              </svg>
+              No stations match your filter
+            </div>
+            <p className="text-gray-500 mb-4">
+              Filter: "<span className="text-cyan-400">{icaoFilter}</span>" matches 0 of {weatherICAOs.length} stations
+            </p>
+            <button 
+              onClick={handleClearFilter}
+              className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded text-white transition-colors"
+            >
+              Clear Filter
+            </button>
+          </div>
+        ) : filteredICAOs.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-400 text-lg mb-4">
               <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
