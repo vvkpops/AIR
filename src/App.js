@@ -1,6 +1,7 @@
 // Complete App.js with draggable weather cards like iPhone icons
 // Enhanced with Minima Filter Toggle, Color Customization, and ICAO Filter
 // Updated with interactive toggle buttons instead of settings panel for main controls
+// FIXED: Modal state tracking to prevent drag interference with text selection
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
@@ -482,9 +483,17 @@ const SettingsPanel = ({
   );
 };
 
-// Simple NOTAM Modal
-const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
+// Simple NOTAM Modal - UPDATED to track modal state
+const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalStateChange }) => {
   const modalRef = useRef(null);
+  
+  // Notify parent component about modal state changes
+  useEffect(() => {
+    if (onModalStateChange) {
+      onModalStateChange(isOpen);
+    }
+  }, [isOpen, onModalStateChange]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
@@ -500,6 +509,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
+  
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') onClose();
@@ -507,6 +517,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     if (isOpen) document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
+  
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(
@@ -549,7 +560,13 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
               {notamData.map((notam, idx) => (
                 <pre
                   key={idx}
-                  className="bg-black text-green-400 text-xs font-mono whitespace-pre-wrap mb-6 p-3 rounded border border-gray-700"
+                  className="bg-black text-green-400 text-xs font-mono whitespace-pre-wrap mb-6 p-3 rounded border border-gray-700 select-text cursor-text"
+                  style={{ 
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    MozUserSelect: 'text',
+                    msUserSelect: 'text'
+                  }}
                 >
 {notam.body || notam.summary || notam.rawText || ''}
                 </pre>
@@ -567,7 +584,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   );
 };
 
-// Weather Tile Component with drag functionality and new options
+// Weather Tile Component with drag functionality and new options - UPDATED with modal awareness
 const WeatherTile = ({ 
   icao, 
   weatherMinima, 
@@ -584,7 +601,9 @@ const WeatherTile = ({
   colorScheme,
   customColors,
   borderColoringEnabled,
-  metarFilterEnabled
+  metarFilterEnabled,
+  isAnyModalOpen, // NEW: Track if any modal is open
+  onNotamModalStateChange // NEW: Callback for NOTAM modal state changes
 }) => {
   const [metarRaw, setMetarRaw] = useState("");
   const [tafHtml, setTafHtml] = useState("");
@@ -676,8 +695,22 @@ const WeatherTile = ({
     } catch (e) {}
   }, [minimized, storageKey]);
 
-  // Drag event handlers
+  // NOTAM modal state change handler
+  const handleNotamModalStateChange = (isOpen) => {
+    setNotamModalOpen(isOpen);
+    if (onNotamModalStateChange) {
+      onNotamModalStateChange(isOpen);
+    }
+  };
+
+  // Drag event handlers - UPDATED to check for modal state
   const handleDragStart = (e, isTouch = false) => {
+    // PREVENT DRAG IF ANY MODAL IS OPEN
+    if (isAnyModalOpen) {
+      console.log('Drag prevented: Modal is open');
+      return;
+    }
+
     if (!isLongPressed && isTouch) return;
 
     e.preventDefault();
@@ -698,7 +731,7 @@ const WeatherTile = ({
   };
 
   const handleDragMove = (e, isTouch = false) => {
-    if (!isDragging) return;
+    if (!isDragging || isAnyModalOpen) return; // PREVENT DRAG MOVE IF MODAL IS OPEN
     
     e.preventDefault();
     
@@ -736,8 +769,13 @@ const WeatherTile = ({
     onDragEnd();
   };
 
-  // Long press handling for touch devices - FIXED
+  // Long press handling for touch devices - UPDATED with modal check
   const handleTouchStart = (e) => {
+    // PREVENT LONG PRESS IF ANY MODAL IS OPEN
+    if (isAnyModalOpen) {
+      return;
+    }
+
     // Don't start long press on interactive elements
     if (e.target.tagName === 'INPUT' || 
         e.target.tagName === 'BUTTON' || 
@@ -747,10 +785,12 @@ const WeatherTile = ({
     }
     
     longPressTimer.current = setTimeout(() => {
-      setIsLongPressed(true);
-      // Add haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
+      if (!isAnyModalOpen) { // DOUBLE CHECK MODAL STATE
+        setIsLongPressed(true);
+        // Add haptic feedback if available
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
       }
     }, 500); // 500ms long press
   };
@@ -766,8 +806,13 @@ const WeatherTile = ({
     }
   };
 
-  // Mouse event handlers - FIXED
+  // Mouse event handlers - UPDATED with modal check
   const handleMouseDown = (e) => {
+    // PREVENT MOUSE DOWN DRAG IF ANY MODAL IS OPEN
+    if (isAnyModalOpen) {
+      return;
+    }
+
     // Don't start drag if clicking on interactive elements
     if (e.target.tagName === 'INPUT' || 
         e.target.tagName === 'BUTTON' || 
@@ -786,8 +831,10 @@ const WeatherTile = ({
     handleDragEnd();
   };
 
-  // Touch event handlers - FIXED
+  // Touch event handlers - UPDATED with modal check
   const handleTouchMove = (e) => {
+    if (isAnyModalOpen) return; // PREVENT TOUCH MOVE IF MODAL IS OPEN
+
     if (isLongPressed) {
       if (!isDragging) {
         // Don't start drag if touching interactive elements
@@ -808,9 +855,9 @@ const WeatherTile = ({
     }
   };
 
-  // Add global event listeners
+  // Add global event listeners - UPDATED to only attach when no modal is open
   useEffect(() => {
-    if (isDragging) {
+    if (isDragging && !isAnyModalOpen) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -824,7 +871,7 @@ const WeatherTile = ({
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDragging, isLongPressed, dragOffset]);
+  }, [isDragging, isLongPressed, dragOffset, isAnyModalOpen]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
 
@@ -915,14 +962,14 @@ const WeatherTile = ({
       e.stopPropagation();
       e.preventDefault();
     }
-    setNotamModalOpen(true);
+    handleNotamModalStateChange(true);
     setTimeout(() => {
       fetchNotamData();
     }, 0);
   };
 
   const handleCloseNotamModal = () => {
-    setNotamModalOpen(false);
+    handleNotamModalStateChange(false);
     setNotamData([]);
     setNotamError(null);
   };
@@ -1022,8 +1069,9 @@ const WeatherTile = ({
         className={`relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-lg p-4 border-2 select-none
           ${isDragging ? '' : 'hover:scale-[1.02] hover:shadow-xl hover:shadow-cyan-500/10'} 
           ${getBorderClass()}
-          ${isLongPressed && !isDragging ? 'animate-[wiggle_0.5s_ease-in-out_infinite] scale-[1.02] shadow-lg shadow-cyan-500/20' : ''}
+          ${isLongPressed && !isDragging && !isAnyModalOpen ? 'animate-[wiggle_0.5s_ease-in-out_infinite] scale-[1.02] shadow-lg shadow-cyan-500/20' : ''}
           ${draggedItem === icao && !isDragging ? 'opacity-50 scale-95' : ''}
+          ${isAnyModalOpen ? 'pointer-events-auto' : ''} // ALLOW INTERACTIONS WHEN MODAL IS OPEN
           transition-all duration-300 ease-out backdrop-blur-sm`}
         style={{ 
           ...baseStyle,
@@ -1098,9 +1146,9 @@ const WeatherTile = ({
             })()
           })
         }}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        onMouseDown={!isAnyModalOpen ? handleMouseDown : undefined} // CONDITIONALLY ATTACH MOUSE DOWN
+        onTouchStart={!isAnyModalOpen ? handleTouchStart : undefined} // CONDITIONALLY ATTACH TOUCH START
+        onTouchEnd={!isAnyModalOpen ? handleTouchEnd : undefined} // CONDITIONALLY ATTACH TOUCH END
         aria-live="polite"
       >
         {/* Enhanced Remove button with better animations - FIXED */}
@@ -1144,20 +1192,22 @@ const WeatherTile = ({
 
         {/* Enhanced Title with gradient text and drag handle */}
         <div className="flex items-center justify-center gap-2 relative">
-          {/* Drag handle */}
-          <div className="absolute left-0 top-0 bottom-0 flex items-center cursor-grab active:cursor-grabbing" title="Drag to reorder">
-            <svg width="12" height="16" viewBox="0 0 12 16" className="text-gray-500 hover:text-cyan-400 transition-colors">
-              <circle cx="2" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="2" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="2" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="12" r="1.5" fill="currentColor" />
-            </svg>
-          </div>
+          {/* Drag handle - ONLY SHOW WHEN NO MODAL IS OPEN */}
+          {!isAnyModalOpen && (
+            <div className="absolute left-0 top-0 bottom-0 flex items-center cursor-grab active:cursor-grabbing" title="Drag to reorder">
+              <svg width="12" height="16" viewBox="0 0 12 16" className="text-gray-500 hover:text-cyan-400 transition-colors">
+                <circle cx="2" cy="4" r="1.5" fill="currentColor" />
+                <circle cx="2" cy="8" r="1.5" fill="currentColor" />
+                <circle cx="2" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="6" cy="4" r="1.5" fill="currentColor" />
+                <circle cx="6" cy="8" r="1.5" fill="currentColor" />
+                <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="4" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="8" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="12" r="1.5" fill="currentColor" />
+              </svg>
+            </div>
+          )}
           <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
         </div>
 
@@ -1268,7 +1318,7 @@ const WeatherTile = ({
           </>
         )}
         
-        {/* NOTAM Modal */}
+        {/* NOTAM Modal - UPDATED with modal state tracking */}
         <NotamModal 
           icao={icao}
           isOpen={notamModalOpen}
@@ -1276,11 +1326,12 @@ const WeatherTile = ({
           notamData={notamData}
           loading={notamLoading}
           error={notamError}
+          onModalStateChange={handleNotamModalStateChange} // PASS MODAL STATE CHANGE HANDLER
         />
       </div>
 
-      {/* Enhanced dragging clone with premium effects */}
-      {isDragging && (
+      {/* Enhanced dragging clone with premium effects - ONLY SHOW WHEN NO MODAL IS OPEN */}
+      {isDragging && !isAnyModalOpen && (
         <div 
           className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl p-4 border-2 border-cyan-400 backdrop-blur-md"
           style={{
@@ -1290,7 +1341,7 @@ const WeatherTile = ({
         >
           <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
           <div className="mt-2 text-center text-cyan-400 text-sm font-medium animate-pulse flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
             Dragging...
             <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
           </div>
@@ -1379,16 +1430,24 @@ const WeatherMonitorApp = () => {
 
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
 
-  // ICAO Filter state - NEW
+  // ICAO Filter state
   const [icaoFilter, setIcaoFilter] = useState("");
   const [showFilteredOnly, setShowFilteredOnly] = useState(false);
+
+  // Modal state tracking - NEW
+  const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
 
   // Drag state with insertion position tracking
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragInsertPosition, setDragInsertPosition] = useState(null);
   
   const icaoInputRef = useRef(null);
-  const filterInputRef = useRef(null); // NEW
+  const filterInputRef = useRef(null);
+
+  // Modal state change handler - NEW
+  const handleNotamModalStateChange = (isOpen) => {
+    setIsAnyModalOpen(isOpen);
+  };
 
   // Persist state to localStorage
   useEffect(() => {
@@ -1506,7 +1565,7 @@ const WeatherMonitorApp = () => {
     setGlobalWeatherMinimized(prev => !prev);
   };
 
-  // Filter functions - NEW
+  // Filter functions
   const getFilteredICAOs = () => {
     if (!showFilteredOnly || !icaoFilter.trim()) {
       return weatherICAOs;
@@ -1532,7 +1591,6 @@ const WeatherMonitorApp = () => {
   const handleToggleFilter = () => {
     setShowFilteredOnly(prev => !prev);
     if (!showFilteredOnly) {
-      // Focus the filter input when enabling filter mode
       setTimeout(() => filterInputRef.current?.focus(), 100);
     }
   };
@@ -1542,7 +1600,7 @@ const WeatherMonitorApp = () => {
     setShowFilteredOnly(false);
   };
 
-  const filteredICAOs = getFilteredICAOs(); // NEW
+  const filteredICAOs = getFilteredICAOs();
 
   // Drag and drop handlers
   const handleDragStart = (icao) => {
@@ -1560,13 +1618,11 @@ const WeatherMonitorApp = () => {
     
     const newInsertPosition = { targetIcao, insertAfter };
     
-    // Only update if position actually changed
     if (!dragInsertPosition || 
         dragInsertPosition.targetIcao !== newInsertPosition.targetIcao || 
         dragInsertPosition.insertAfter !== newInsertPosition.insertAfter) {
       setDragInsertPosition(newInsertPosition);
       
-      // Immediately reorder the array for smooth visual feedback
       setWeatherICAOs(prev => {
         const newOrder = prev.filter(icao => icao !== draggedIcao);
         const targetIndex = newOrder.indexOf(targetIcao);
@@ -1581,7 +1637,6 @@ const WeatherMonitorApp = () => {
     }
   };
 
-  // Helper function to determine if a tile should show insertion space
   const shouldShowInsertionSpace = (icao, position) => {
     if (!dragInsertPosition || !draggedItem || icao === draggedItem) return false;
     
@@ -1598,7 +1653,7 @@ const WeatherMonitorApp = () => {
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
       
-            {/* Global Weather Minima Controls with integrated toggle buttons */}
+      {/* Global Weather Minima Controls */}
       <div className="max-w-screen-2xl mx-auto px-6 mb-4">
         <div className="flex flex-wrap gap-2 sm:gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
           <span className="font-bold text-cyan-300">Weather Minima:</span>
@@ -1628,9 +1683,8 @@ const WeatherMonitorApp = () => {
             Set Default
           </button>
           
-          {/* Moved toggle buttons here */}
+          {/* Toggle buttons */}
           <div className="flex flex-wrap items-center gap-3 ml-4 text-sm">
-            {/* TAF Filter Toggle */}
             <div className="flex items-center gap-2">
               <span className="text-gray-400">TAF:</span>
               <button
@@ -1640,13 +1694,11 @@ const WeatherMonitorApp = () => {
                     ? 'bg-green-600 text-white shadow-md hover:bg-green-500' 
                     : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
                 }`}
-                title={`${minimaFilterEnabled ? 'Disable' : 'Enable'} TAF minima color coding`}
               >
                 {minimaFilterEnabled ? '✓ ON' : '✗ OFF'}
               </button>
             </div>
 
-            {/* METAR Filter Toggle */}
             <div className="flex items-center gap-2">
               <span className="text-gray-400">METAR:</span>
               <button
@@ -1656,7 +1708,6 @@ const WeatherMonitorApp = () => {
                     ? 'bg-green-600 text-white shadow-md hover:bg-green-500' 
                     : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
                 }`}
-                title={`${metarFilterEnabled ? 'Disable' : 'Enable'} METAR minima color coding`}
               >
                 {metarFilterEnabled ? '✓ ON' : '✗ OFF'}
               </button>
@@ -1664,7 +1715,6 @@ const WeatherMonitorApp = () => {
 
             <span className="text-gray-400">|</span>
 
-            {/* Border Coloring Toggle */}
             <div className="flex items-center gap-2">
               <span className="text-gray-400">Borders:</span>
               <button
@@ -1674,7 +1724,6 @@ const WeatherMonitorApp = () => {
                     ? 'bg-blue-600 text-white shadow-md hover:bg-blue-500' 
                     : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
                 }`}
-                title={`${borderColoringEnabled ? 'Disable' : 'Enable'} border color coding based on minima`}
               >
                 {borderColoringEnabled ? '✓ ON' : '✗ OFF'}
               </button>
@@ -1682,13 +1731,11 @@ const WeatherMonitorApp = () => {
 
             <span className="text-gray-400">|</span>
 
-            {/* Color Scheme Indicator - kept but simplified */}
             <div className="flex items-center gap-2">
               <span className="text-gray-400">Colors:</span>
               <button
                 onClick={() => setSettingsPanelOpen(true)}
                 className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
-                title="Change color scheme"
               >
                 🎨 {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
               </button>
@@ -1697,7 +1744,7 @@ const WeatherMonitorApp = () => {
         </div>
       </div>
       
-      {/* ICAO Input and Controls - Simplified */}
+      {/* ICAO Input and Controls */}
       <div className="max-w-screen-2xl mx-auto px-6 mb-6">
         <div className="flex flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
           <input 
@@ -1716,17 +1763,14 @@ const WeatherMonitorApp = () => {
           <button
             onClick={toggleGlobalWeatherMinimize}
             className={`ml-2 px-4 py-2 rounded text-white transition-colors ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-            title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
           >
             {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
           </button>
         </div>
 
-        {/* ICAO Filter Controls - NEW SECTION */}
+        {/* ICAO Filter Controls */}
         <div className="flex flex-wrap justify-center gap-2 items-center bg-gray-700 rounded-lg p-4">
-          <span className="text-cyan-300 font-semibold">
-            🔍 Filter: 
-          </span>
+          <span className="text-cyan-300 font-semibold">🔍 Filter:</span>
           <input 
             ref={filterInputRef}
             value={icaoFilter}
@@ -1737,7 +1781,6 @@ const WeatherMonitorApp = () => {
           <button 
             onClick={handleToggleFilter} 
             className={`px-4 py-2 rounded text-white transition-colors font-medium ${showFilteredOnly ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 hover:bg-gray-500'}`}
-            title={showFilteredOnly ? 'Show all stations' : 'Apply filter'}
           >
             {showFilteredOnly ? 'Filter Active' : 'Apply Filter'}
           </button>
@@ -1745,7 +1788,6 @@ const WeatherMonitorApp = () => {
             <button 
               onClick={handleClearFilter} 
               className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-white transition-colors"
-              title="Clear filter and show all"
             >
               Clear
             </button>
@@ -1756,17 +1798,15 @@ const WeatherMonitorApp = () => {
         </div>
       </div>
       
-      {/* Weather Tiles Grid - UPDATED TO USE FILTERED ICAOs */}
+      {/* Weather Tiles Grid */}
       <div className="max-w-screen-2xl mx-auto px-6 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
           {filteredICAOs.map((icao, index) => (
             <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
-              {/* Enhanced insertion space indicator before */}
               {shouldShowInsertionSpace(icao, 'before') && (
-                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite]" />
               )}
               
-              {/* Drop zone overlay for better visual feedback */}
               {draggedItem && icao !== draggedItem && (
                 <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/30 bg-cyan-400/5 opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
               )}
@@ -1788,17 +1828,18 @@ const WeatherMonitorApp = () => {
                 customColors={customColors}
                 borderColoringEnabled={borderColoringEnabled}
                 metarFilterEnabled={metarFilterEnabled}
+                isAnyModalOpen={isAnyModalOpen}
+                onNotamModalStateChange={handleNotamModalStateChange}
               />
               
-              {/* Enhanced insertion space indicator after */}
               {shouldShowInsertionSpace(icao, 'after') && (
-                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite]" />
               )}
             </div>
           ))}
         </div>
         
-        {/* UPDATED EMPTY STATE TO HANDLE FILTERS */}
+        {/* Empty States */}
         {filteredICAOs.length === 0 && weatherICAOs.length > 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-400 text-lg mb-4">
@@ -1827,9 +1868,6 @@ const WeatherMonitorApp = () => {
             </div>
             <p className="text-gray-500">
               Add ICAO codes above to start monitoring weather conditions
-            </p>
-            <p className="text-gray-400 mt-2 text-sm">
-              Use the Colors button to configure color schemes and the toggle buttons to enable minima filtering
             </p>
           </div>
         )}
