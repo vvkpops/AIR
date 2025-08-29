@@ -1,13 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 
-const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
+const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalStateChange }) => {
   const modalRef = useRef(null);
   const scrollPositionRef = useRef(0);
   const bodyStylesRef = useRef({});
 
   // Enhanced page position preservation
   useEffect(() => {
+    // Notify parent component about modal state changes
+    if (onModalStateChange) {
+      onModalStateChange(isOpen);
+    }
+
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         onClose();
@@ -61,7 +66,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, onModalStateChange]);
 
   useEffect(() => {
     const handleEscape = (event) => {
@@ -135,30 +140,59 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     return cleaned;
   };
 
-  // Copy to clipboard function
-  const copyToClipboard = async (text, notamNumber = '') => {
+  // Copy to clipboard function with enhanced feedback
+  const copyToClipboard = async (text, notamNumber = '', buttonElement = null) => {
+    if (!text) return;
+    
     try {
       await navigator.clipboard.writeText(text);
-      // Show a brief success indicator
-      const button = event.target;
-      const originalText = button.textContent;
-      button.textContent = '✓ Copied!';
-      button.classList.add('bg-green-600');
-      setTimeout(() => {
-        button.textContent = originalText;
-        button.classList.remove('bg-green-600');
-      }, 2000);
+      
+      // Enhanced visual feedback
+      if (buttonElement) {
+        const originalContent = buttonElement.innerHTML;
+        const originalClasses = buttonElement.className;
+        
+        buttonElement.innerHTML = `
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          Copied!
+        `;
+        buttonElement.className = originalClasses.replace('bg-gray-600 hover:bg-gray-500', 'bg-green-600');
+        
+        setTimeout(() => {
+          buttonElement.innerHTML = originalContent;
+          buttonElement.className = originalClasses;
+        }, 2000);
+      }
+      
+      console.log('Text copied successfully');
     } catch (err) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = text;
       textArea.style.position = 'fixed';
       textArea.style.opacity = '0';
+      textArea.style.left = '-9999px';
       document.body.appendChild(textArea);
       textArea.select();
       try {
         document.execCommand('copy');
         console.log('Text copied using fallback method');
+        
+        // Show feedback even for fallback
+        if (buttonElement) {
+          const originalContent = buttonElement.innerHTML;
+          buttonElement.innerHTML = `
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            Copied!
+          `;
+          setTimeout(() => {
+            buttonElement.innerHTML = originalContent;
+          }, 2000);
+        }
       } catch (fallbackErr) {
         console.error('Failed to copy text:', fallbackErr);
       }
@@ -166,8 +200,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     }
   };
 
-  // Copy all NOTAMs function
-  const copyAllNotams = () => {
+  // Copy all NOTAMs function with enhanced feedback
+  const copyAllNotams = (e) => {
     if (!notamData || notamData.length === 0) return;
     
     const allNotamsText = notamData.map((notam, index) => {
@@ -191,7 +225,7 @@ Total NOTAMs: ${notamData.length}
 
 ${allNotamsText}`;
     
-    copyToClipboard(fullText);
+    copyToClipboard(fullText, `all-${icao}`, e.currentTarget);
   };
 
   const formatDate = (dateStr) => {
@@ -254,17 +288,19 @@ ${allNotamsText}`;
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Copy All Button */}
+            {/* Copy All Button - Enhanced */}
             {notamData && notamData.length > 0 && (
               <button
                 onClick={copyAllNotams}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2"
-                title="Copy all NOTAMs to clipboard"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md transform hover:scale-105"
+                title={`Copy all ${notamData.length} NOTAMs to clipboard`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                 </svg>
-                Copy All
+                Copy All ({notamData.length})
               </button>
             )}
             <button 
@@ -359,13 +395,18 @@ ${allNotamsText}`;
                               <span>{notam.location}</span>
                             </div>
                           )}
-                          {/* Individual Copy Button */}
+                          {/* Individual Copy Button - Enhanced */}
                           <button
-                            onClick={() => copyToClipboard(displayText || 'No text available', notam.number)}
-                            className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                            title="Copy this NOTAM to clipboard"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(displayText || 'No text available', notam.number, e.currentTarget);
+                            }}
+                            className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 flex items-center gap-1.5 shadow-sm hover:shadow-md transform hover:scale-105"
+                            title={`Copy NOTAM ${notam.number || index + 1} to clipboard`}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                             </svg>
                             Copy
@@ -384,25 +425,54 @@ ${allNotamsText}`;
                             <span className="text-xs text-gray-500 ml-2">(Click and drag to select text)</span>
                           </h5>
                           <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-orange-500 relative group">
-                            {/* Selection-friendly text container */}
+                            {/* Enhanced selection-friendly text container */}
                             <div 
-                              className="text-gray-100 leading-relaxed text-sm whitespace-pre-wrap font-mono select-text cursor-text hover:bg-gray-750 transition-colors p-2 rounded border border-transparent hover:border-gray-600"
+                              className="text-gray-100 leading-relaxed text-sm whitespace-pre-wrap font-mono select-text cursor-text hover:bg-gray-750 transition-colors p-3 rounded border border-transparent hover:border-gray-600 focus-within:border-cyan-500"
                               style={{ 
                                 userSelect: 'text',
                                 WebkitUserSelect: 'text',
                                 MozUserSelect: 'text',
                                 msUserSelect: 'text'
                               }}
-                              onMouseDown={(e) => e.stopPropagation()} // Prevent modal drag interference
-                              onTouchStart={(e) => e.stopPropagation()} // Prevent modal touch interference
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                              }}
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                              }}
+                              tabIndex="0"
                             >
                               {displayText}
                             </div>
                             
-                            {/* Copy overlay hint */}
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-700 text-white text-xs px-2 py-1 rounded pointer-events-none">
+                            {/* Enhanced copy overlay hint with floating copy button */}
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-gray-700 text-white text-xs px-2 py-1 rounded pointer-events-none flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                              </svg>
                               Select text to copy
                             </div>
+                            
+                            {/* Quick copy button overlay */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(displayText, notam.number, e.currentTarget);
+                              }}
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-cyan-600 hover:bg-cyan-500 text-white p-1.5 rounded-md shadow-lg transform hover:scale-105"
+                              title="Quick copy NOTAM text"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       )}
@@ -459,16 +529,33 @@ ${allNotamsText}`;
                                 MozUserSelect: 'text',
                                 msUserSelect: 'text'
                               }}
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onTouchStart={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => {
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                              }}
+                              onDragStart={(e) => {
+                                e.stopPropagation();
+                              }}
                             >
                               {notam.body}
                             </div>
                             <button
-                              onClick={() => copyToClipboard(notam.body, notam.number)}
-                              className="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(notam.body, notam.number, e.currentTarget);
+                              }}
+                              className="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors flex items-center gap-1"
                               title="Copy raw text"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
                             >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                              </svg>
                               Copy Raw
                             </button>
                           </div>
