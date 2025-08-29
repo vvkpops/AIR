@@ -27,7 +27,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
-      document.body.style.overflowY = 'scroll';
+      document.body.style.overflowY = 'scroll'; // Keep scrollbar to prevent layout shift
     } else {
       // Restore body styles
       document.body.style.position = '';
@@ -61,6 +61,60 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  // Enhanced function to clean up NOTAM text for display
+  const cleanNotamText = (rawText) => {
+    if (!rawText || typeof rawText !== 'string') return rawText;
+    
+    // Remove excessive whitespace and normalize line breaks
+    let cleaned = rawText
+      .replace(/\\n/g, '\n')        // Convert \n to actual newlines
+      .replace(/\s+/g, ' ')         // Replace multiple spaces with single space
+      .replace(/\n\s+/g, '\n')      // Remove spaces at start of lines
+      .replace(/\s+\n/g, '\n')      // Remove spaces at end of lines
+      .replace(/\n{3,}/g, '\n\n')   // Replace multiple newlines with max 2
+      .trim();
+    
+    // If this still looks like escaped JSON, try to extract the meaningful parts
+    if (cleaned.includes('"raw"') || cleaned.includes('"english"') || cleaned.includes('"french"')) {
+      try {
+        const jsonData = JSON.parse(cleaned);
+        // Priority: english > raw > french
+        if (jsonData.english && typeof jsonData.english === 'string') {
+          cleaned = jsonData.english.replace(/\\n/g, '\n');
+        } else if (jsonData.raw && typeof jsonData.raw === 'string') {
+          cleaned = jsonData.raw.replace(/\\n/g, '\n');
+        } else if (jsonData.french && typeof jsonData.french === 'string') {
+          cleaned = jsonData.french.replace(/\\n/g, '\n');
+        }
+      } catch (e) {
+        // Manual extraction if JSON parsing fails
+        const patterns = [
+          /"english"\s*:\s*"([^"]+)"/,
+          /"raw"\s*:\s*"([^"]+)"/,
+          /"french"\s*:\s*"([^"]+)"/
+        ];
+        
+        for (const pattern of patterns) {
+          const match = cleaned.match(pattern);
+          if (match && match[1]) {
+            cleaned = match[1].replace(/\\n/g, '\n');
+            break;
+          }
+        }
+      }
+    }
+    
+    // Final cleanup
+    cleaned = cleaned
+      .replace(/\\n/g, '\n')
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s+/g, '\n')
+      .replace(/\s+\n/g, '\n')
+      .trim();
+    
+    return cleaned;
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not specified';
@@ -173,6 +227,10 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                 const isPermanent = notam.validTo === 'PERMANENT';
                 const typeLabel = getNotamTypeLabel(notam);
                 
+                // Clean the NOTAM text
+                const cleanedBody = cleanNotamText(notam.body);
+                const cleanedSummary = cleanNotamText(notam.summary);
+                
                 return (
                   <div key={index} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden hover:border-gray-500 transition-colors">
                     <div className="bg-gray-800 px-6 py-4 border-b border-gray-600">
@@ -213,7 +271,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                     
                     {/* NOTAM Body */}
                     <div className="p-6 space-y-5">
-                      {(notam.summary || notam.body) && (
+                      {(cleanedSummary || cleanedBody) && (
                         <div>
                           <h5 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
                             <span>📝</span>
@@ -221,7 +279,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                           </h5>
                           <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-orange-500">
                             <pre className="text-gray-100 leading-relaxed text-sm whitespace-pre-wrap font-mono">
-                              {notam.body || notam.summary}
+                              {cleanedBody || cleanedSummary}
                             </pre>
                           </div>
                         </div>
@@ -261,6 +319,21 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                           </h6>
                           <p className="text-gray-200 font-mono text-xs">{notam.qLine}</p>
                         </div>
+                      )}
+                      
+                      {/* Raw text section - only show if different from cleaned version */}
+                      {notam.body && notam.body !== cleanedBody && (
+                        <details className="group">
+                          <summary className="cursor-pointer text-gray-400 hover:text-gray-200 font-semibold flex items-center gap-2 p-2 bg-gray-800 rounded transition-colors group-open:bg-gray-700">
+                            <span className="transform group-open:rotate-90 transition-transform">▶</span>
+                            🔍 View Original Raw Text
+                          </summary>
+                          <div className="mt-3 bg-black p-4 rounded border border-gray-700">
+                            <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap overflow-x-auto leading-relaxed">
+                              {notam.body}
+                            </pre>
+                          </div>
+                        </details>
                       )}
                     </div>
                   </div>
