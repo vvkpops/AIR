@@ -483,7 +483,7 @@ const SettingsPanel = ({
   );
 };
 
-// Enhanced NOTAM Modal with copy functionality and complete drag disconnection
+// Enhanced NOTAM Modal with single copy button and simplified time format
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalStateChange }) => {
   const modalRef = useRef(null);
   const scrollPositionRef = useRef(0);
@@ -600,8 +600,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalS
       const text = notam.body || notam.summary || notam.rawText || 'No text available';
       return `=== NOTAM ${index + 1}: ${notam.number || `${icao}-${index + 1}`} ===
 Location: ${notam.location || icao}
-Valid From: ${notam.validFrom || 'Not specified'}
-Valid To: ${notam.validTo || 'Not specified'}
+Valid From: ${formatTime(notam.validFrom)}
+Valid To: ${formatTime(notam.validTo)}
 
 ${text}
 
@@ -614,6 +614,21 @@ Total NOTAMs: ${notamData.length}
 ${allNotamsText}`;
     
     copyToClipboard(fullText);
+  };
+
+  // Simplified time format - only HH:MM Z
+  const formatTime = (dateStr) => {
+    if (!dateStr) return 'Not specified';
+    if (dateStr === 'PERMANENT') return 'PERMANENT';
+    
+    try {
+      const date = new Date(dateStr);
+      const hours = date.getUTCHours().toString().padStart(2, '0');
+      const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes} Z`;
+    } catch {
+      return dateStr;
+    }
   };
   
   if (!isOpen) return null;
@@ -656,7 +671,7 @@ ${allNotamsText}`;
           </div>
         </div>
         
-        {/* Enhanced content with individual copy buttons */}
+        {/* Enhanced content with single copy button per NOTAM */}
         <div className="modal-body-scrollable p-6">
           {loading ? (
             <div className="text-center py-16">
@@ -692,13 +707,13 @@ ${allNotamsText}`;
                 </div>
               </div>
 
-              {/* NOTAM Cards with enhanced copy functionality */}
+              {/* NOTAM Cards with single copy button */}
               {notamData.map((notam, idx) => {
                 const notamText = notam.body || notam.summary || notam.rawText || 'No text available';
                 
                 return (
                   <div key={idx} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden hover:border-gray-500 transition-colors">
-                    {/* NOTAM Header */}
+                    {/* NOTAM Header with single copy button */}
                     <div className="bg-gray-800 px-6 py-4 border-b border-gray-600">
                       <div className="flex justify-between items-start flex-wrap gap-3">
                         <div className="flex items-center gap-3 flex-wrap">
@@ -715,46 +730,24 @@ ${allNotamsText}`;
                           )}
                         </div>
                         
-                        {/* Copy button for individual NOTAM */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => copyToClipboard(notamText, notam.number)}
-                            className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1 hover:scale-105"
-                            title="Copy this NOTAM to clipboard"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                            </svg>
-                            Copy
-                          </button>
-                          
-                          {/* Quick Copy Icon */}
-                          <button
-                            onClick={() => copyToClipboard(notamText, notam.number)}
-                            className="w-8 h-8 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg"
-                            title="Quick copy NOTAM text"
-                          >
-                            📋
-                          </button>
-                        </div>
+                        {/* Single Copy Button */}
+                        <button
+                          onClick={() => copyToClipboard(notamText, notam.number)}
+                          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 hover:scale-105"
+                          title="Copy this NOTAM to clipboard"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                          </svg>
+                          Copy NOTAM
+                        </button>
                       </div>
                     </div>
                     
-                    {/* NOTAM Content with floating copy icon */}
-                    <div className="p-6 relative">
-                      {/* Floating Copy Icon */}
-                      <button
-                        onClick={() => copyToClipboard(notamText, notam.number)}
-                        className="absolute top-4 right-4 w-10 h-10 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg z-10 opacity-70 hover:opacity-100"
-                        title="Copy this NOTAM text"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                        </svg>
-                      </button>
-                      
+                    {/* NOTAM Content */}
+                    <div className="p-6">
                       {/* Enhanced text container with perfect text selection */}
-                      <div className="bg-black p-4 rounded-lg border-l-4 border-orange-500 pr-14 relative group">
+                      <div className="bg-black p-4 rounded-lg border-l-4 border-orange-500 relative group mb-4">
                         <div 
                           className="text-green-400 text-sm font-mono whitespace-pre-wrap leading-relaxed select-text cursor-text hover:bg-gray-900 transition-colors p-2 rounded border border-transparent hover:border-gray-600"
                           style={{ 
@@ -773,23 +766,23 @@ ${allNotamsText}`;
                         
                         {/* Selection hint */}
                         <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-700 text-white text-xs px-2 py-1 rounded pointer-events-none">
-                          Click and drag to select text • Use copy buttons for quick copy
+                          Click and drag to select text
                         </div>
                       </div>
                       
-                      {/* Metadata */}
+                      {/* Simplified time display - only show HH:MM Z */}
                       {(notam.validFrom || notam.validTo) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {notam.validFrom && (
                             <div className="bg-gray-800 p-3 rounded-lg">
                               <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
-                              <p className="text-gray-200 font-mono text-xs select-text">{notam.validFrom}</p>
+                              <p className="text-gray-200 font-mono text-lg select-text">{formatTime(notam.validFrom)}</p>
                             </div>
                           )}
                           {notam.validTo && (
                             <div className="bg-gray-800 p-3 rounded-lg">
                               <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
-                              <p className="text-gray-200 font-mono text-xs select-text">{notam.validTo}</p>
+                              <p className="text-gray-200 font-mono text-lg select-text">{formatTime(notam.validTo)}</p>
                             </div>
                           )}
                         </div>
