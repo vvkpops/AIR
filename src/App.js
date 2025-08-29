@@ -850,14 +850,18 @@ const WeatherTile = ({
   const [notamLoading, setNotamLoading] = useState(false);
   const [notamError, setNotamError] = useState(null);
 
-  // Drag state
+    // Drag state
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const dragRef = useRef(null);
   const longPressTimer = useRef(null);
   const [isLongPressed, setIsLongPressed] = useState(false);
-
+  
+  // NEW: Better click vs drag detection
+  const [hasMoved, setHasMoved] = useState(false);
+  const [mouseDownPos, setMouseDownPos] = useState({ x: 0, y: 0 });
+  const DRAG_THRESHOLD = 5; // pixels - minimum movement to start drag
   const storageKey = `weatherTileMin_${icao}`;
   const [minimized, setMinimized] = useState(() => {
     try {
@@ -1043,7 +1047,7 @@ const WeatherTile = ({
     }
   };
 
-    // Mouse event handlers - COMPLETELY DISABLED when modal is open
+      // Mouse event handlers - FIXED with better click detection
   const handleMouseDown = (e) => {
     // COMPLETELY PREVENT MOUSE DOWN IF ANY MODAL IS OPEN OR DATA ATTRIBUTE IS SET
     if (isAnyModalOpen || document.body.getAttribute('data-modal-open')) {
@@ -1059,11 +1063,10 @@ const WeatherTile = ({
         e.target.closest('button')) {
       return;
     }
-    handleDragStart(e, false);
-  };
-
-  const handleMouseMove = (e) => {
-    handleDragMove(e, false);
+    
+    // Store initial mouse position for drag threshold detection
+    setMouseDownPos({ x: e.clientX, y: e.clientY });
+    setHasMoved(false);
   };
 
   const handleMouseUp = () => {
