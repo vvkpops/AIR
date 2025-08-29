@@ -964,6 +964,7 @@ const WeatherTile = ({
         document.removeEventListener('touchend', handleGlobalTouchEnd);
       };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mouseDownPos, isDragging, isLongPressed, dragOffset]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
