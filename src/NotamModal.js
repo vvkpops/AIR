@@ -66,54 +66,60 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const cleanNotamText = (rawText) => {
     if (!rawText || typeof rawText !== 'string') return rawText;
     
-    // Remove excessive whitespace and normalize line breaks
-    let cleaned = rawText
-      .replace(/\\n/g, '\n')        // Convert \n to actual newlines
-      .replace(/\s+/g, ' ')         // Replace multiple spaces with single space
-      .replace(/\n\s+/g, '\n')      // Remove spaces at start of lines
-      .replace(/\s+\n/g, '\n')      // Remove spaces at end of lines
-      .replace(/\n{3,}/g, '\n\n')   // Replace multiple newlines with max 2
-      .trim();
-    
-    // If this still looks like escaped JSON, try to extract the meaningful parts
-    if (cleaned.includes('"raw"') || cleaned.includes('"english"') || cleaned.includes('"french"')) {
+    // Check if this looks like CFPS JSON format
+    if (rawText.includes('"raw"') || rawText.includes('"english"')) {
       try {
-        const jsonData = JSON.parse(cleaned);
-        // Priority: english > raw > french
-        if (jsonData.english && typeof jsonData.english === 'string') {
-          cleaned = jsonData.english.replace(/\\n/g, '\n');
-        } else if (jsonData.raw && typeof jsonData.raw === 'string') {
-          cleaned = jsonData.raw.replace(/\\n/g, '\n');
-        } else if (jsonData.french && typeof jsonData.french === 'string') {
-          cleaned = jsonData.french.replace(/\\n/g, '\n');
+        const jsonData = JSON.parse(rawText);
+        // Priority: english > raw (exclude french)
+        if (jsonData.english && typeof jsonData.english === 'string' && jsonData.english.trim()) {
+          return cleanText(jsonData.english);
+        } else if (jsonData.raw && typeof jsonData.raw === 'string' && jsonData.raw.trim()) {
+          return cleanText(jsonData.raw);
         }
       } catch (e) {
         // Manual extraction if JSON parsing fails
         const patterns = [
-          /"english"\s*:\s*"([^"]+)"/,
-          /"raw"\s*:\s*"([^"]+)"/,
-          /"french"\s*:\s*"([^"]+)"/
+          /"english"\s*:\s*"((?:[^"\\]|\\.)*)"/s,
+          /"raw"\s*:\s*"((?:[^"\\]|\\.)*)"/s
         ];
         
         for (const pattern of patterns) {
-          const match = cleaned.match(pattern);
+          const match = rawText.match(pattern);
           if (match && match[1]) {
-            cleaned = match[1].replace(/\\n/g, '\n');
-            break;
+            let extracted = match[1];
+            try {
+              // Properly unescape JSON string
+              extracted = JSON.parse('"' + extracted + '"');
+              return cleanText(extracted);
+            } catch (unescapeError) {
+              // Manual cleanup if JSON unescaping fails
+              extracted = extracted
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\');
+              return cleanText(extracted);
+            }
           }
         }
       }
     }
     
-    // Final cleanup
-    cleaned = cleaned
-      .replace(/\\n/g, '\n')
-      .replace(/\s+/g, ' ')
-      .replace(/\n\s+/g, '\n')
-      .replace(/\s+\n/g, '\n')
-      .trim();
+    return cleanText(rawText);
+  };
+
+  // Helper function for final text cleaning
+  const cleanText = (text) => {
+    if (!text || typeof text !== 'string') return text;
     
-    return cleaned;
+    return text
+      .replace(/\\n/g, '\n')           // Convert escaped newlines
+      .replace(/\\"/g, '"')            // Convert escaped quotes
+      .replace(/\\\\/g, '\\')          // Convert escaped backslashes
+      .replace(/\s+/g, ' ')            // Normalize whitespace
+      .replace(/\n\s+/g, '\n')         // Remove leading spaces on lines
+      .replace(/\s+\n/g, '\n')         // Remove trailing spaces on lines
+      .replace(/\n{3,}/g, '\n\n')      // Limit consecutive newlines
+      .trim();                         // Remove leading/trailing whitespace
   };
 
   const formatDate = (dateStr) => {
@@ -321,8 +327,8 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                         </div>
                       )}
                       
-                      {/* Raw text section - only show if different from cleaned version */}
-                      {notam.body && notam.body !== cleanedBody && (
+                      {/* Raw text section - only show if significantly different from cleaned version */}
+                      {notam.body && notam.body !== cleanedBody && notam.body.length > cleanedBody.length + 50 && (
                         <details className="group">
                           <summary className="cursor-pointer text-gray-400 hover:text-gray-200 font-semibold flex items-center gap-2 p-2 bg-gray-800 rounded transition-colors group-open:bg-gray-700">
                             <span className="transform group-open:rotate-90 transition-transform">▶</span>
