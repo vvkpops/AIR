@@ -616,20 +616,23 @@ ${allNotamsText}`;
     copyToClipboard(fullText);
   };
 
-  // Simplified time format - only HH:MM Z
-  const formatTime = (dateStr) => {
-    if (!dateStr) return 'Not specified';
-    if (dateStr === 'PERMANENT') return 'PERMANENT';
-    
-    try {
-      const date = new Date(dateStr);
-      const hours = date.getUTCHours().toString().padStart(2, '0');
-      const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-      return `${hours}:${minutes} Z`;
-    } catch {
-      return dateStr;
-    }
-  };
+  // Enhanced time format - show date and time ending with HH:MM Z
+const formatTime = (dateStr) => {
+  if (!dateStr) return 'Not specified';
+  if (dateStr === 'PERMANENT') return 'PERMANENT';
+  
+  try {
+    const date = new Date(dateStr);
+    const year = date.getUTCFullYear();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes} Z`;
+  } catch {
+    return dateStr;
+  }
+};
   
   if (!isOpen) return null;
 
@@ -770,22 +773,23 @@ ${allNotamsText}`;
                         </div>
                       </div>
                       
-                      {/* Simplified time display - only show HH:MM Z */}
-                      {(notam.validFrom || notam.validTo) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {notam.validFrom && (
-                            <div className="bg-gray-800 p-3 rounded-lg">
-                              <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
-                              <p className="text-gray-200 font-mono text-lg select-text">{formatTime(notam.validFrom)}</p>
-                            </div>
-                          )}
-                          {notam.validTo && (
-                            <div className="bg-gray-800 p-3 rounded-lg">
-                              <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
-                              <p className="text-gray-200 font-mono text-lg select-text">{formatTime(notam.validTo)}</p>
-                            </div>
-                          )}
-                        </div>
+                      {/* Enhanced time display - show date and time ending with HH:MM Z */}
+{(notam.validFrom || notam.validTo) && (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {notam.validFrom && (
+      <div className="bg-gray-800 p-3 rounded-lg">
+        <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
+        <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validFrom)}</p>
+      </div>
+    )}
+    {notam.validTo && (
+      <div className="bg-gray-800 p-3 rounded-lg">
+        <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
+        <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validTo)}</p>
+      </div>
+    )}
+  </div>
+)}
                       )}
                     </div>
                   </div>
