@@ -31,43 +31,69 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
-  // Helper function to parse CFPS NOTAM JSON strings
+  // Enhanced function to parse CFPS NOTAM JSON strings
   const parseCFPSNotamText = (jsonString) => {
     if (!jsonString || typeof jsonString !== 'string') return null;
     
+    // First, try direct JSON parsing
     try {
       const parsed = JSON.parse(jsonString);
       
-      // Priority order: english > raw > french
-      if (parsed.english && typeof parsed.english === 'string') {
-        return parsed.english.replace(/\\n/g, '\n');
+      // Priority order: english > raw (exclude french)
+      if (parsed.english && typeof parsed.english === 'string' && parsed.english.trim()) {
+        return cleanNotamText(parsed.english);
       }
-      if (parsed.raw && typeof parsed.raw === 'string') {
-        return parsed.raw.replace(/\\n/g, '\n');
-      }
-      if (parsed.french && typeof parsed.french === 'string') {
-        return parsed.french.replace(/\\n/g, '\n');
+      if (parsed.raw && typeof parsed.raw === 'string' && parsed.raw.trim()) {
+        return cleanNotamText(parsed.raw);
       }
       
       return null;
     } catch (e) {
-      // If JSON parsing fails, try to extract manually
-      const patterns = [
-        /"english"\s*:\s*"([^"]+)"/,
-        /"raw"\s*:\s*"([^"]+)"/,
-        /"french"\s*:\s*"([^"]+)"/
-      ];
-      
-      for (const pattern of patterns) {
-        const match = jsonString.match(pattern);
-        if (match && match[1]) {
-          return match[1].replace(/\\n/g, '\n');
+      console.log('Direct JSON parsing failed, trying manual extraction...');
+    }
+    
+    // Manual extraction using regex patterns - more robust
+    const patterns = [
+      /"english"\s*:\s*"((?:[^"\\]|\\.)*)"/s,  // Match with escaped characters
+      /"raw"\s*:\s*"((?:[^"\\]|\\.)*)"/s       // Match with escaped characters
+    ];
+    
+    for (const pattern of patterns) {
+      const match = jsonString.match(pattern);
+      if (match && match[1]) {
+        let extracted = match[1];
+        // Unescape JSON string properly
+        try {
+          extracted = JSON.parse('"' + extracted + '"');
+          return cleanNotamText(extracted);
+        } catch (unescapeError) {
+          // If JSON unescaping fails, try manual cleanup
+          extracted = extracted
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+          return cleanNotamText(extracted);
         }
       }
-      
-      // Last resort: return the original string cleaned up
-      return jsonString.replace(/\\n/g, '\n');
     }
+    
+    // Last resort: return cleaned original string
+    return cleanNotamText(jsonString);
+  };
+
+  // Helper function to clean NOTAM text
+  const cleanNotamText = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    
+    return text
+      .replace(/\\n/g, '\n')           // Convert escaped newlines
+      .replace(/\\"/g, '"')            // Convert escaped quotes  
+      .replace(/\\\\/g, '\\')          // Convert escaped backslashes
+      .replace(/\s+/g, ' ')            // Normalize whitespace
+      .replace(/\n\s+/g, '\n')         // Remove leading spaces on lines
+      .replace(/\s+\n/g, '\n')         // Remove trailing spaces on lines
+      .replace(/\n{3,}/g, '\n\n')      // Limit consecutive newlines
+      .trim();                         // Remove leading/trailing whitespace
   };
 
   // Helper function to extract NOTAM number from text
@@ -229,6 +255,8 @@ export default async function handler(req, res) {
               }
 
               navItems.forEach((it, index) => {
+                console.log(`[API] Processing CFPS NOTAM ${index + 1}:`, JSON.stringify(it, null, 2));
+                
                 // Enhanced parsing for CFPS format
                 let bodyText = '';
                 let summaryText = '';
@@ -238,6 +266,7 @@ export default async function handler(req, res) {
                 
                 // Try to extract text from the CFPS JSON structure
                 if (it.summary && typeof it.summary === 'string') {
+                  console.log(`[API] Parsing summary: ${it.summary.substring(0, 100)}...`);
                   const parsedSummary = parseCFPSNotamText(it.summary);
                   if (parsedSummary) {
                     summaryText = parsedSummary;
@@ -245,10 +274,12 @@ export default async function handler(req, res) {
                     const dates = extractNotamDates(parsedSummary);
                     validFrom = dates.validFrom;
                     validTo = dates.validTo;
+                    console.log(`[API] Extracted from summary - Number: ${notamNumber}, Text length: ${summaryText.length}`);
                   }
                 }
                 
                 if (it.body && typeof it.body === 'string') {
+                  console.log(`[API] Parsing body: ${it.body.substring(0, 100)}...`);
                   const parsedBody = parseCFPSNotamText(it.body);
                   if (parsedBody) {
                     bodyText = parsedBody;
@@ -261,20 +292,18 @@ export default async function handler(req, res) {
                       validFrom = validFrom || dates.validFrom;
                       validTo = validTo || dates.validTo;
                     }
+                    console.log(`[API] Extracted from body - Number: ${notamNumber}, Text length: ${bodyText.length}`);
                   }
                 }
                 
                 // Fallback to original fields if parsing failed
                 if (!bodyText) {
                   bodyText = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
+                  console.log(`[API] Using fallback body text, length: ${bodyText.length}`);
                 }
                 if (!summaryText) {
                   summaryText = bodyText.split('\n')[0] || bodyText.substring(0, 200) + '...';
                 }
-                
-                // Clean up the text - remove extra whitespace and normalize line breaks
-                bodyText = bodyText.replace(/\s+/g, ' ').replace(/\\n/g, '\n').trim();
-                summaryText = summaryText.replace(/\s+/g, ' ').replace(/\\n/g, '\n').trim();
                 
                 // Use provided fields as fallback
                 const finalNumber = notamNumber || it.id || it.notamId || it.number || `${upicao}-CFPS-${index + 1}`;
@@ -282,7 +311,7 @@ export default async function handler(req, res) {
                 const finalValidTo = validTo || it.end || it.finish || it.validTo || '';
                 const location = it.site || it.siteCode || it.icao || upicao;
 
-                parsed.push({
+                const finalNotam = {
                   number: finalNumber,
                   type: it.type || 'NOTAM',
                   classification: it.classification || '',
@@ -293,7 +322,10 @@ export default async function handler(req, res) {
                   summary: summaryText,
                   body: bodyText,
                   qLine: it.qLine || bodyText.split('\n')[0] || ''
-                });
+                };
+
+                console.log(`[API] Final processed NOTAM:`, JSON.stringify(finalNotam, null, 2));
+                parsed.push(finalNotam);
               });
             } else {
               // navData was not JSON — use raw text fallback: try to find blocks separated by double newlines
