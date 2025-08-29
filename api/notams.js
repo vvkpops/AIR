@@ -1,5 +1,5 @@
 // api/notams.js - Vercel serverless function for NOTAM fetching
-// Updated: fallback to NAV CANADA CFPS when FAA returns no NOTAMs for Canadian ICAOs
+// Updated: Enhanced CFPS JSON parsing for Canadian NOTAMs
 
 export default async function handler(req, res) {
   // Set CORS headers
@@ -30,6 +30,95 @@ export default async function handler(req, res) {
     console.error('Missing FAA API credentials');
     return res.status(500).json({ error: 'Server configuration error' });
   }
+
+  // Helper function to parse CFPS NOTAM JSON strings
+  const parseCFPSNotamText = (jsonString) => {
+    if (!jsonString || typeof jsonString !== 'string') return null;
+    
+    try {
+      const parsed = JSON.parse(jsonString);
+      
+      // Priority order: english > raw > french
+      if (parsed.english && typeof parsed.english === 'string') {
+        return parsed.english.replace(/\\n/g, '\n');
+      }
+      if (parsed.raw && typeof parsed.raw === 'string') {
+        return parsed.raw.replace(/\\n/g, '\n');
+      }
+      if (parsed.french && typeof parsed.french === 'string') {
+        return parsed.french.replace(/\\n/g, '\n');
+      }
+      
+      return null;
+    } catch (e) {
+      // If JSON parsing fails, try to extract manually
+      const patterns = [
+        /"english"\s*:\s*"([^"]+)"/,
+        /"raw"\s*:\s*"([^"]+)"/,
+        /"french"\s*:\s*"([^"]+)"/
+      ];
+      
+      for (const pattern of patterns) {
+        const match = jsonString.match(pattern);
+        if (match && match[1]) {
+          return match[1].replace(/\\n/g, '\n');
+        }
+      }
+      
+      // Last resort: return the original string cleaned up
+      return jsonString.replace(/\\n/g, '\n');
+    }
+  };
+
+  // Helper function to extract NOTAM number from text
+  const extractNotamNumber = (text) => {
+    if (!text) return '';
+    
+    // Look for patterns like "Q1101/25", "H4517/25", "V0876/25", etc.
+    const match = text.match(/\b([A-Z]?\d+\/\d+)\b/);
+    return match ? match[1] : '';
+  };
+
+  // Helper function to extract dates from NOTAM text
+  const extractNotamDates = (text) => {
+    if (!text) return { validFrom: '', validTo: '' };
+    
+    const dates = { validFrom: '', validTo: '' };
+    
+    // Look for B) and C) lines with dates
+    const bMatch = text.match(/B\)\s*(\d{10})/);
+    const cMatch = text.match(/C\)\s*(\d{10}|PERM)/);
+    
+    if (bMatch) {
+      const dateStr = bMatch[1];
+      if (dateStr.length === 10) {
+        const year = 2000 + parseInt(dateStr.substring(0, 2));
+        const month = parseInt(dateStr.substring(2, 4)) - 1;
+        const day = parseInt(dateStr.substring(4, 6));
+        const hour = parseInt(dateStr.substring(6, 8));
+        const minute = parseInt(dateStr.substring(8, 10));
+        dates.validFrom = new Date(year, month, day, hour, minute).toISOString();
+      }
+    }
+    
+    if (cMatch) {
+      if (cMatch[1] === 'PERM') {
+        dates.validTo = 'PERMANENT';
+      } else {
+        const dateStr = cMatch[1];
+        if (dateStr.length === 10) {
+          const year = 2000 + parseInt(dateStr.substring(0, 2));
+          const month = parseInt(dateStr.substring(2, 4)) - 1;
+          const day = parseInt(dateStr.substring(4, 6));
+          const hour = parseInt(dateStr.substring(6, 8));
+          const minute = parseInt(dateStr.substring(8, 10));
+          dates.validTo = new Date(year, month, day, hour, minute).toISOString();
+        }
+      }
+    }
+    
+    return dates;
+  };
 
   try {
     const upicao = icao.toUpperCase();
@@ -139,25 +228,71 @@ export default async function handler(req, res) {
                 }
               }
 
-              navItems.forEach(it => {
-                // Try to extract text fields from common keys
-                const body = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
-                const number = it.id || it.notamId || it.number || '';
-                const validFrom = it.start || it.begin || it.validFrom || '';
-                const validTo = it.end || it.finish || it.validTo || '';
-                const location = it.site || it.siteCode || upicao;
+              navItems.forEach((it, index) => {
+                // Enhanced parsing for CFPS format
+                let bodyText = '';
+                let summaryText = '';
+                let notamNumber = '';
+                let validFrom = '';
+                let validTo = '';
+                
+                // Try to extract text from the CFPS JSON structure
+                if (it.summary && typeof it.summary === 'string') {
+                  const parsedSummary = parseCFPSNotamText(it.summary);
+                  if (parsedSummary) {
+                    summaryText = parsedSummary;
+                    notamNumber = extractNotamNumber(parsedSummary);
+                    const dates = extractNotamDates(parsedSummary);
+                    validFrom = dates.validFrom;
+                    validTo = dates.validTo;
+                  }
+                }
+                
+                if (it.body && typeof it.body === 'string') {
+                  const parsedBody = parseCFPSNotamText(it.body);
+                  if (parsedBody) {
+                    bodyText = parsedBody;
+                    // If we didn't get info from summary, try body
+                    if (!notamNumber) {
+                      notamNumber = extractNotamNumber(parsedBody);
+                    }
+                    if (!validFrom || !validTo) {
+                      const dates = extractNotamDates(parsedBody);
+                      validFrom = validFrom || dates.validFrom;
+                      validTo = validTo || dates.validTo;
+                    }
+                  }
+                }
+                
+                // Fallback to original fields if parsing failed
+                if (!bodyText) {
+                  bodyText = it.notam || it.text || it.raw || it.body || it.description || JSON.stringify(it);
+                }
+                if (!summaryText) {
+                  summaryText = bodyText.split('\n')[0] || bodyText.substring(0, 200) + '...';
+                }
+                
+                // Clean up the text - remove extra whitespace and normalize line breaks
+                bodyText = bodyText.replace(/\s+/g, ' ').replace(/\\n/g, '\n').trim();
+                summaryText = summaryText.replace(/\s+/g, ' ').replace(/\\n/g, '\n').trim();
+                
+                // Use provided fields as fallback
+                const finalNumber = notamNumber || it.id || it.notamId || it.number || `${upicao}-CFPS-${index + 1}`;
+                const finalValidFrom = validFrom || it.start || it.begin || it.validFrom || '';
+                const finalValidTo = validTo || it.end || it.finish || it.validTo || '';
+                const location = it.site || it.siteCode || it.icao || upicao;
 
                 parsed.push({
-                  number,
-                  type: it.type || '',
+                  number: finalNumber,
+                  type: it.type || 'NOTAM',
                   classification: it.classification || '',
-                  icao: location || upicao,
-                  location: location || upicao,
-                  validFrom,
-                  validTo,
-                  summary: (typeof body === 'string' ? (body.split('\n')[0] || body) : ''),
-                  body: typeof body === 'string' ? body : JSON.stringify(body),
-                  qLine: it.qLine || ''
+                  icao: location,
+                  location: location,
+                  validFrom: finalValidFrom,
+                  validTo: finalValidTo,
+                  summary: summaryText,
+                  body: bodyText,
+                  qLine: it.qLine || bodyText.split('\n')[0] || ''
                 });
               });
             } else {
@@ -167,7 +302,7 @@ export default async function handler(req, res) {
                 chunks.forEach((chunk, idx) => {
                   parsed.push({
                     number: `${upicao}-NAVCAN-${idx+1}`,
-                    type: '',
+                    type: 'NOTAM',
                     classification: '',
                     icao: upicao,
                     location: upicao,
@@ -192,7 +327,7 @@ export default async function handler(req, res) {
     // Filter for currently valid or future NOTAMs only
     const now = new Date();
     parsed = parsed.filter(n => {
-      if (!n.validTo) return true; // keep if end time missing
+      if (!n.validTo || n.validTo === 'PERMANENT') return true; // keep if end time missing or permanent
       try {
         return new Date(n.validTo) >= now;
       } catch {
