@@ -483,10 +483,11 @@ const SettingsPanel = ({
   );
 };
 
-// Simple NOTAM Modal - UPDATED to track modal state
+// Enhanced NOTAM Modal with copy functionality and complete drag disconnection
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalStateChange }) => {
   const modalRef = useRef(null);
-  
+  const scrollPositionRef = useRef(0);
+
   // Notify parent component about modal state changes
   useEffect(() => {
     if (onModalStateChange) {
@@ -494,19 +495,59 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalS
     }
   }, [isOpen, onModalStateChange]);
 
+  // Enhanced page position preservation and complete drag disconnection
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         onClose();
       }
     };
+
     if (isOpen) {
+      // Store current scroll position
+      scrollPositionRef.current = window.scrollY;
+      
+      // Calculate scrollbar width to prevent layout shift
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+      
+      // Add event listener
       document.addEventListener('mousedown', handleClickOutside);
+      
+      // Prevent body scroll and maintain position
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollPositionRef.current}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+      
+      // Prevent scrolling on the html element as well
+      document.documentElement.style.overflow = 'hidden';
+      
+      // Add special class to completely disable all drag functionality
       document.body.classList.add('modal-open');
+      document.body.setAttribute('data-modal-open', 'true');
+      
+    } else {
+      // Restore all body styles
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      
+      // Restore html overflow
+      document.documentElement.style.overflow = '';
+      
+      // Remove modal classes
+      document.body.classList.remove('modal-open');
+      document.body.removeAttribute('data-modal-open');
+      
+      // Restore scroll position
+      window.scrollTo(0, scrollPositionRef.current);
     }
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
   
@@ -517,29 +558,111 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalS
     if (isOpen) document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
+
+  // Enhanced copy to clipboard function
+  const copyToClipboard = async (text, notamNumber = '') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Visual feedback - find the button that was clicked
+      const activeButton = document.activeElement;
+      if (activeButton && activeButton.tagName === 'BUTTON') {
+        const originalText = activeButton.textContent;
+        const originalClass = activeButton.className;
+        activeButton.textContent = '✓ Copied!';
+        activeButton.className = originalClass.replace('bg-gray-600', 'bg-green-600').replace('bg-blue-600', 'bg-green-600');
+        setTimeout(() => {
+          activeButton.textContent = originalText;
+          activeButton.className = originalClass;
+        }, 2000);
+      }
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (fallbackErr) {
+        console.error('Failed to copy text:', fallbackErr);
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
+  // Copy all NOTAMs function
+  const copyAllNotams = () => {
+    if (!notamData || notamData.length === 0) return;
+    
+    const allNotamsText = notamData.map((notam, index) => {
+      const text = notam.body || notam.summary || notam.rawText || 'No text available';
+      return `=== NOTAM ${index + 1}: ${notam.number || `${icao}-${index + 1}`} ===
+Location: ${notam.location || icao}
+Valid From: ${notam.validFrom || 'Not specified'}
+Valid To: ${notam.validTo || 'Not specified'}
+
+${text}
+
+`;
+    }).join('\n');
+    
+    const fullText = `NOTAMs for ${icao} - Generated: ${new Date().toLocaleString()}
+Total NOTAMs: ${notamData.length}
+
+${allNotamsText}`;
+    
+    copyToClipboard(fullText);
+  };
   
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(
     <div className="modal-overlay modal-backdrop-blur modal-animate">
       <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600">
+        {/* Header with Copy All button */}
         <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
-          <div>
-            <h3 className="text-xl font-bold text-cyan-400">Raw NOTAMs for {icao}</h3>
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold">📋</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-cyan-400">NOTAMs for {icao}</h3>
+              <p className="text-gray-400 text-sm">Notice to Airmen - Current Active NOTAMs</p>
+            </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
-            title="Close NOTAMs"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Copy All Button */}
+            {notamData && notamData.length > 0 && (
+              <button
+                onClick={copyAllNotams}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 hover:scale-105"
+                title="Copy all NOTAMs to clipboard"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                Copy All
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
+              title="Close NOTAMs"
+            >
+              ×
+            </button>
+          </div>
         </div>
+        
+        {/* Enhanced content with individual copy buttons */}
         <div className="modal-body-scrollable p-6">
           {loading ? (
             <div className="text-center py-16">
               <div className="inline-block w-12 h-12 border-4 border-t-orange-500 border-gray-600 rounded-full animate-spin mb-4"></div>
               <p className="text-xl text-orange-400 font-semibold mb-2">Fetching NOTAMs...</p>
+              <p className="text-gray-400">Checking FAA and NAV CANADA sources...</p>
             </div>
           ) : error ? (
             <div className="text-center py-16">
@@ -556,27 +679,144 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error, onModalS
               </button>
             </div>
           ) : notamData && notamData.length > 0 ? (
-            <div>
-              {notamData.map((notam, idx) => (
-                <pre
-                  key={idx}
-                  className="bg-black text-green-400 text-xs font-mono whitespace-pre-wrap mb-6 p-3 rounded border border-gray-700 select-text cursor-text"
-                  style={{ 
-                    userSelect: 'text',
-                    WebkitUserSelect: 'text',
-                    MozUserSelect: 'text',
-                    msUserSelect: 'text'
-                  }}
-                >
-{notam.body || notam.summary || notam.rawText || ''}
-                </pre>
-              ))}
+            <div className="space-y-6">
+              {/* Summary */}
+              <div className="bg-gray-900 rounded-lg p-4 border border-gray-600">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-cyan-400 font-semibold text-lg">
+                    📊 Total NOTAMs Found: {notamData.length}
+                  </span>
+                  <span className="text-gray-400 text-sm">
+                    🔗 Source: {icao.startsWith('C') ? 'FAA + NAV CANADA' : 'FAA NOTAM System'} • Updated: {new Date().toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* NOTAM Cards with enhanced copy functionality */}
+              {notamData.map((notam, idx) => {
+                const notamText = notam.body || notam.summary || notam.rawText || 'No text available';
+                
+                return (
+                  <div key={idx} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden hover:border-gray-500 transition-colors">
+                    {/* NOTAM Header */}
+                    <div className="bg-gray-800 px-6 py-4 border-b border-gray-600">
+                      <div className="flex justify-between items-start flex-wrap gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-orange-400 font-bold text-xl">
+                            {notam.number || `NOTAM ${idx + 1}`}
+                          </span>
+                          <span className="px-3 py-1 bg-purple-600 text-white text-xs rounded-full font-bold">
+                            {notam.type || 'NOTAM'}
+                          </span>
+                          {notam.validTo === 'PERMANENT' && (
+                            <span className="px-3 py-1 bg-red-600 text-white text-xs rounded-full font-bold">
+                              PERMANENT
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Copy button for individual NOTAM */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => copyToClipboard(notamText, notam.number)}
+                            className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1 hover:scale-105"
+                            title="Copy this NOTAM to clipboard"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Copy
+                          </button>
+                          
+                          {/* Quick Copy Icon */}
+                          <button
+                            onClick={() => copyToClipboard(notamText, notam.number)}
+                            className="w-8 h-8 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg"
+                            title="Quick copy NOTAM text"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* NOTAM Content with floating copy icon */}
+                    <div className="p-6 relative">
+                      {/* Floating Copy Icon */}
+                      <button
+                        onClick={() => copyToClipboard(notamText, notam.number)}
+                        className="absolute top-4 right-4 w-10 h-10 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg z-10 opacity-70 hover:opacity-100"
+                        title="Copy this NOTAM text"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                      </button>
+                      
+                      {/* Enhanced text container with perfect text selection */}
+                      <div className="bg-black p-4 rounded-lg border-l-4 border-orange-500 pr-14 relative group">
+                        <div 
+                          className="text-green-400 text-sm font-mono whitespace-pre-wrap leading-relaxed select-text cursor-text hover:bg-gray-900 transition-colors p-2 rounded border border-transparent hover:border-gray-600"
+                          style={{ 
+                            userSelect: 'text',
+                            WebkitUserSelect: 'text',
+                            MozUserSelect: 'text',
+                            msUserSelect: 'text',
+                            WebkitTouchCallout: 'default'
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onSelectStart={(e) => e.stopPropagation()}
+                        >
+                          {notamText}
+                        </div>
+                        
+                        {/* Selection hint */}
+                        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-700 text-white text-xs px-2 py-1 rounded pointer-events-none">
+                          Click and drag to select text • Use copy buttons for quick copy
+                        </div>
+                      </div>
+                      
+                      {/* Metadata */}
+                      {(notam.validFrom || notam.validTo) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                          {notam.validFrom && (
+                            <div className="bg-gray-800 p-3 rounded-lg">
+                              <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
+                              <p className="text-gray-200 font-mono text-xs select-text">{notam.validFrom}</p>
+                            </div>
+                          )}
+                          {notam.validTo && (
+                            <div className="bg-gray-800 p-3 rounded-lg">
+                              <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
+                              <p className="text-gray-200 font-mono text-xs select-text">{notam.validTo}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <div className="text-center py-16 text-gray-400">
-              No active NOTAMs found for {icao}.
+            <div className="text-center py-16">
+              <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-gray-400 text-3xl">📋</span>
+              </div>
+              <h4 className="text-xl text-gray-400 font-semibold mb-3">No NOTAMs Found</h4>
+              <p className="text-gray-500 mb-6">No active NOTAMs are currently published for {icao}</p>
+              <p className="text-gray-600 text-sm">This usually means favorable conditions with no restrictions</p>
             </div>
           )}
+        </div>
+        
+        {/* Footer */}
+        <div className="modal-footer-fixed border-t border-gray-700 p-4 bg-gray-900 text-center rounded-b-xl">
+          <p className="text-gray-400 text-sm">
+            📡 NOTAMs from {icao.startsWith('C') ? 'FAA + NAV CANADA' : 'FAA'} • 
+            <span className="text-orange-400 font-semibold"> Always verify with official sources before flight</span>
+          </p>
         </div>
       </div>
     </div>,
@@ -806,11 +1046,13 @@ const WeatherTile = ({
     }
   };
 
-  // Mouse event handlers - UPDATED with modal check
+    // Mouse event handlers - COMPLETELY DISABLED when modal is open
   const handleMouseDown = (e) => {
-    // PREVENT MOUSE DOWN DRAG IF ANY MODAL IS OPEN
-    if (isAnyModalOpen) {
-      return;
+    // COMPLETELY PREVENT MOUSE DOWN IF ANY MODAL IS OPEN OR DATA ATTRIBUTE IS SET
+    if (isAnyModalOpen || document.body.getAttribute('data-modal-open')) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
     }
 
     // Don't start drag if clicking on interactive elements
