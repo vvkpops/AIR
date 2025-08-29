@@ -1598,7 +1598,7 @@ const WeatherMonitorApp = () => {
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
       
-      {/* Global Weather Minima Controls with Settings Button */}
+            {/* Global Weather Minima Controls with integrated toggle buttons */}
       <div className="max-w-screen-2xl mx-auto px-6 mb-4">
         <div className="flex flex-wrap gap-2 sm:gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
           <span className="font-bold text-cyan-300">Weather Minima:</span>
@@ -1628,45 +1628,7 @@ const WeatherMonitorApp = () => {
             Set Default
           </button>
           
-          {/* Settings Button */}
-          <button
-            onClick={() => setSettingsPanelOpen(true)}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2"
-            title="Color Scheme Settings"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-            </svg>
-            Colors
-          </button>
-        </div>
-      </div>
-      
-      {/* ICAO Input and Controls - ENHANCED WITH FILTER */}
-      <div className="max-w-screen-2xl mx-auto px-6 mb-6">
-        <div className="flex flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
-          <input 
-            ref={icaoInputRef}
-            placeholder="Enter ICAOs (e.g. CYYT,EGLL,KJFK)" 
-            className="bg-gray-700 p-2 rounded text-center w-72 text-white placeholder-gray-400"
-            onKeyPress={handleIcaoInputKeyPress}
-          />
-          <button 
-            onClick={handleAddWeatherICAO} 
-            className="bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700 transition-colors"
-          >
-            Add ICAO(s)
-          </button>
-
-          <button
-            onClick={toggleGlobalWeatherMinimize}
-            className={`ml-2 px-4 py-2 rounded text-white transition-colors ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-            title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
-          >
-            {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
-          </button>
-
-          {/* Interactive Filter Controls */}
+          {/* Moved toggle buttons here */}
           <div className="flex flex-wrap items-center gap-3 ml-4 text-sm">
             {/* TAF Filter Toggle */}
             <div className="flex items-center gap-2">
@@ -1720,7 +1682,7 @@ const WeatherMonitorApp = () => {
 
             <span className="text-gray-400">|</span>
 
-            {/* Color Scheme Indicator */}
+            {/* Color Scheme Indicator - kept but simplified */}
             <div className="flex items-center gap-2">
               <span className="text-gray-400">Colors:</span>
               <button
@@ -1732,6 +1694,32 @@ const WeatherMonitorApp = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+      
+      {/* ICAO Input and Controls - Simplified */}
+      <div className="max-w-screen-2xl mx-auto px-6 mb-6">
+        <div className="flex flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
+          <input 
+            ref={icaoInputRef}
+            placeholder="Enter ICAOs (e.g. CYYT,EGLL,KJFK)" 
+            className="bg-gray-700 p-2 rounded text-center w-72 text-white placeholder-gray-400"
+            onKeyPress={handleIcaoInputKeyPress}
+          />
+          <button 
+            onClick={handleAddWeatherICAO} 
+            className="bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700 transition-colors"
+          >
+            Add ICAO(s)
+          </button>
+
+          <button
+            onClick={toggleGlobalWeatherMinimize}
+            className={`ml-2 px-4 py-2 rounded text-white transition-colors ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+            title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
+          >
+            {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
+          </button>
         </div>
 
         {/* ICAO Filter Controls - NEW SECTION */}
