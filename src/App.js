@@ -2,7 +2,6 @@
 // Enhanced with Minima Filter Toggle, Color Customization, and ICAO Filter
 // Updated with interactive toggle buttons instead of settings panel for main controls
 // FIXED: Modal state tracking to prevent drag interference with text selection
-// FIXED: Click handling to prevent unwanted page scrolling
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
@@ -385,7 +384,7 @@ const SettingsPanel = ({
     <div className="modal-overlay modal-backdrop-blur modal-animate">
       <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl">
         <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
-          <h3 className="text-xl font-bold text-cyan-400">Color Scheme Settings</h3>
+          <h3 className="text-xl font-bold text-cyan-400">🎨 Color Scheme Settings</h3>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
@@ -618,22 +617,22 @@ ${allNotamsText}`;
   };
 
   // Enhanced time format - show date and time ending with HH:MM Z
-  const formatTime = (dateStr) => {
-    if (!dateStr) return 'Not specified';
-    if (dateStr === 'PERMANENT') return 'PERMANENT';
-    
-    try {
-      const date = new Date(dateStr);
-      const year = date.getUTCFullYear();
-      const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-      const day = date.getUTCDate().toString().padStart(2, '0');
-      const hours = date.getUTCHours().toString().padStart(2, '0');
-      const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-      return `${year}-${month}-${day} ${hours}:${minutes} Z`;
-    } catch {
-      return dateStr;
-    }
-  };
+const formatTime = (dateStr) => {
+  if (!dateStr) return 'Not specified';
+  if (dateStr === 'PERMANENT') return 'PERMANENT';
+  
+  try {
+    const date = new Date(dateStr);
+    const year = date.getUTCFullYear();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes} Z`;
+  } catch {
+    return dateStr;
+  }
+};
   
   if (!isOpen) return null;
 
@@ -775,21 +774,22 @@ ${allNotamsText}`;
                       </div>
                       
                       {/* Enhanced time display - show date and time ending with HH:MM Z */}
-                      {(notam.validFrom || notam.validTo) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {notam.validFrom && (
-                            <div className="bg-gray-800 p-3 rounded-lg">
-                              <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
-                              <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validFrom)}</p>
-                            </div>
-                          )}
-                          {notam.validTo && (
-                            <div className="bg-gray-800 p-3 rounded-lg">
-                              <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
-                              <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validTo)}</p>
-                            </div>
-                          )}
-                        </div>
+{(notam.validFrom || notam.validTo) && (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {notam.validFrom && (
+      <div className="bg-gray-800 p-3 rounded-lg">
+        <h6 className="text-green-400 font-semibold mb-1 text-sm">🟢 Effective From</h6>
+        <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validFrom)}</p>
+      </div>
+    )}
+    {notam.validTo && (
+      <div className="bg-gray-800 p-3 rounded-lg">
+        <h6 className="text-red-400 font-semibold mb-1 text-sm">🔴 Valid Until</h6>
+        <p className="text-gray-200 font-mono text-sm select-text">{formatTime(notam.validTo)}</p>
+      </div>
+    )}
+  </div>
+)}
                       )}
                     </div>
                   </div>
@@ -821,7 +821,7 @@ ${allNotamsText}`;
   );
 };
 
-// Weather Tile Component with drag functionality and new options - UPDATED with modal awareness and FIXED click handling
+// Weather Tile Component with drag functionality and new options - UPDATED with modal awareness
 const WeatherTile = ({ 
   icao, 
   weatherMinima, 
@@ -850,18 +850,13 @@ const WeatherTile = ({
   const [notamLoading, setNotamLoading] = useState(false);
   const [notamError, setNotamError] = useState(null);
 
-  // Drag state - FIXED with better click detection
+  // Drag state
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const dragRef = useRef(null);
   const longPressTimer = useRef(null);
   const [isLongPressed, setIsLongPressed] = useState(false);
-  
-  // NEW: Better click vs drag detection
-  const [hasMoved, setHasMoved] = useState(false);
-  const [mouseDownPos, setMouseDownPos] = useState({ x: 0, y: 0 });
-  const DRAG_THRESHOLD = 5; // pixels - minimum movement to start drag
 
   const storageKey = `weatherTileMin_${icao}`;
   const [minimized, setMinimized] = useState(() => {
@@ -911,9 +906,10 @@ const WeatherTile = ({
   // Function to get METAR color class based on conditions
   const getMETARColorClass = () => {
     if (!metarFilterEnabled) {
-      return getCurrentColors().metar;
+      return getCurrentColors().metar; // Use base METAR color when filter is off
     }
     
+    // Parse METAR to check if it meets minima
     const p = parseLine(metarRaw);
     const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
     const ceilOk = p.ceiling >= min.ceiling;
@@ -944,15 +940,18 @@ const WeatherTile = ({
     }
   };
 
-  // FIXED: Better drag detection to prevent unwanted scrolling
+  // Drag event handlers - UPDATED to check for modal state
   const handleDragStart = (e, isTouch = false) => {
     // PREVENT DRAG IF ANY MODAL IS OPEN
     if (isAnyModalOpen) {
+      console.log('Drag prevented: Modal is open');
       return;
     }
 
     if (!isLongPressed && isTouch) return;
 
+    e.preventDefault();
+    
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
     
@@ -965,28 +964,16 @@ const WeatherTile = ({
     setDragOffset(offset);
     setDragPosition({ x: clientX - offset.x, y: clientY - offset.y });
     setIsDragging(true);
-    setHasMoved(false); // Reset movement tracking
     onDragStart(icao);
-    
-    // Only prevent default after we've started dragging
-    e.preventDefault();
   };
 
   const handleDragMove = (e, isTouch = false) => {
-    if (!isDragging || isAnyModalOpen) return;
+    if (!isDragging || isAnyModalOpen) return; // PREVENT DRAG MOVE IF MODAL IS OPEN
+    
+    e.preventDefault();
     
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-    
-    // Track if we've actually moved enough to constitute a drag
-    const deltaX = Math.abs(clientX - mouseDownPos.x);
-    const deltaY = Math.abs(clientY - mouseDownPos.y);
-    
-    if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-      setHasMoved(true);
-      // Only prevent default once we're actually dragging
-      e.preventDefault();
-    }
     
     setDragPosition({
       x: clientX - dragOffset.x,
@@ -998,11 +985,14 @@ const WeatherTile = ({
     const tileBelow = elementBelow?.closest('[data-icao]');
     
     if (tileBelow && tileBelow.dataset.icao !== icao) {
+      // Calculate if we should insert before or after the target
       const rect = tileBelow.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
       
+      // For grid layout, consider both X and Y positions
       const insertAfter = clientX > centerX || clientY > centerY;
+      
       onReorder(icao, tileBelow.dataset.icao, insertAfter);
     }
   };
@@ -1013,11 +1003,10 @@ const WeatherTile = ({
     setIsDragging(false);
     setIsLongPressed(false);
     setDragPosition({ x: 0, y: 0 });
-    setHasMoved(false);
     onDragEnd();
   };
 
-  // FIXED: Long press handling for touch devices
+  // Long press handling for touch devices - UPDATED with modal check
   const handleTouchStart = (e) => {
     // PREVENT LONG PRESS IF ANY MODAL IS OPEN
     if (isAnyModalOpen) {
@@ -1032,37 +1021,29 @@ const WeatherTile = ({
       return;
     }
     
-    // Store initial touch position
-    const touch = e.touches[0];
-    setMouseDownPos({ x: touch.clientX, y: touch.clientY });
-    
     longPressTimer.current = setTimeout(() => {
-      if (!isAnyModalOpen) {
+      if (!isAnyModalOpen) { // DOUBLE CHECK MODAL STATE
         setIsLongPressed(true);
+        // Add haptic feedback if available
         if (navigator.vibrate) {
           navigator.vibrate(50);
         }
       }
-    }, 500);
+    }, 500); // 500ms long press
   };
 
   const handleTouchEnd = (e) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
     }
-    
     if (!isDragging) {
       setIsLongPressed(false);
     } else {
-      // Only prevent default if we actually dragged
-      if (hasMoved) {
-        e.preventDefault();
-      }
       handleDragEnd();
     }
   };
 
-  // FIXED: Mouse event handlers to prevent unwanted page jumps
+    // Mouse event handlers - COMPLETELY DISABLED when modal is open
   const handleMouseDown = (e) => {
     // COMPLETELY PREVENT MOUSE DOWN IF ANY MODAL IS OPEN OR DATA ATTRIBUTE IS SET
     if (isAnyModalOpen || document.body.getAttribute('data-modal-open')) {
@@ -1078,45 +1059,24 @@ const WeatherTile = ({
         e.target.closest('button')) {
       return;
     }
-    
-    // Store initial mouse position for drag threshold detection
-    setMouseDownPos({ x: e.clientX, y: e.clientY });
+    handleDragStart(e, false);
   };
 
   const handleMouseMove = (e) => {
-    // Only start dragging if we haven't started yet and we've moved enough
-    if (!isDragging && mouseDownPos.x !== 0) {
-      const deltaX = Math.abs(e.clientX - mouseDownPos.x);
-      const deltaY = Math.abs(e.clientY - mouseDownPos.y);
-      
-      if (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-        // Now we can start the actual drag
-        handleDragStart(e, false);
-      }
-    } else if (isDragging) {
-      handleDragMove(e, false);
-    }
+    handleDragMove(e, false);
   };
 
-  const handleMouseUp = (e) => {
-    // Reset mouse position tracking
-    setMouseDownPos({ x: 0, y: 0 });
-    
-    if (isDragging) {
-      // Only prevent default if we actually dragged
-      if (hasMoved) {
-        e.preventDefault();
-      }
-      handleDragEnd();
-    }
+  const handleMouseUp = () => {
+    handleDragEnd();
   };
 
-  // FIXED: Touch event handlers
+  // Touch event handlers - UPDATED with modal check
   const handleTouchMove = (e) => {
-    if (isAnyModalOpen) return;
+    if (isAnyModalOpen) return; // PREVENT TOUCH MOVE IF MODAL IS OPEN
 
     if (isLongPressed) {
       if (!isDragging) {
+        // Don't start drag if touching interactive elements
         const touch = e.touches[0];
         const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
         if (elementBelow && (
@@ -1136,26 +1096,21 @@ const WeatherTile = ({
 
   // Add global event listeners - UPDATED to only attach when no modal is open
   useEffect(() => {
-    if ((mouseDownPos.x !== 0 || isDragging) && !isAnyModalOpen) {
-      const handleGlobalMouseMove = (e) => handleMouseMove(e);
-      const handleGlobalMouseUp = (e) => handleMouseUp(e);
-      const handleGlobalTouchMove = (e) => handleTouchMove(e);
-      const handleGlobalTouchEnd = (e) => handleTouchEnd(e);
-      
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('mouseup', handleGlobalMouseUp);
-      document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
-      document.addEventListener('touchend', handleGlobalTouchEnd);
+    if (isDragging && !isAnyModalOpen) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
       
       return () => {
-        document.removeEventListener('mousemove', handleGlobalMouseMove);
-        document.removeEventListener('mouseup', handleGlobalMouseUp);
-        document.removeEventListener('touchmove', handleGlobalTouchMove);
-        document.removeEventListener('touchend', handleGlobalTouchEnd);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mouseDownPos, isDragging, isLongPressed, dragOffset, isAnyModalOpen]);
+  }, [isDragging, isLongPressed, dragOffset, isAnyModalOpen]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
 
@@ -1240,12 +1195,7 @@ const WeatherTile = ({
   };
 
   const handleNotamClick = (e) => {
-    // Only handle click if we're not dragging and didn't move
-    if (isDragging || isLongPressed || hasMoved) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
+    if (isDragging || isLongPressed) return;
     
     if (e && typeof e.stopPropagation === 'function') {
       e.stopPropagation();
@@ -1265,11 +1215,15 @@ const WeatherTile = ({
 
   const getBorderClass = () => {
     if (loading) return "border-gray-700";
-    if (!borderColoringEnabled) return "border-gray-600";
+    if (!borderColoringEnabled) return "border-gray-600"; // Neutral border when border coloring is off
     
+    // Use current color scheme for borders
     const currentColors = getCurrentColors();
+    
+    // Check if TAF contains the current scheme's below-minima color class
     const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
     
+    // Also check METAR conditions for border coloring if METAR filter is enabled
     let metarBelowMinima = false;
     if (metarFilterEnabled && metarRaw) {
       const p = parseLine(metarRaw);
@@ -1278,7 +1232,9 @@ const WeatherTile = ({
       metarBelowMinima = !(visOk && ceilOk);
     }
     
+    // Use below minima colors if either TAF or METAR (when enabled) are below minima  
     if (hasBelowMinimaConditions || metarBelowMinima) {
+      // Map text colors to appropriate border colors for BELOW minima
       switch (currentColors.belowMinima) {
         case 'text-red-400':
         case 'text-red-500':
@@ -1300,10 +1256,11 @@ const WeatherTile = ({
         case 'text-gray-300':
           return "border-gray-400";
         default:
-          return "border-red-500";
+          return "border-red-500"; // fallback
       }
     }
     
+    // Above minima - use appropriate border color
     switch (currentColors.aboveMinima) {
       case 'text-green-400':
       case 'text-green-300':
@@ -1319,7 +1276,7 @@ const WeatherTile = ({
       case 'text-gray-300':
         return "border-gray-400";
       default:
-        return "border-green-500";
+        return "border-green-500"; // fallback
     }
   };
 
@@ -1344,7 +1301,7 @@ const WeatherTile = ({
 
   return (
     <>
-      {/* Original tile */}
+      {/* Original tile (with enhanced animations) */}
       <div 
         ref={dragRef}
         data-icao={icao}
@@ -1353,15 +1310,87 @@ const WeatherTile = ({
           ${getBorderClass()}
           ${isLongPressed && !isDragging && !isAnyModalOpen ? 'animate-[wiggle_0.5s_ease-in-out_infinite] scale-[1.02] shadow-lg shadow-cyan-500/20' : ''}
           ${draggedItem === icao && !isDragging ? 'opacity-50 scale-95' : ''}
-          ${isAnyModalOpen ? 'pointer-events-auto' : ''}
+          ${isAnyModalOpen ? 'pointer-events-auto' : ''} // ALLOW INTERACTIONS WHEN MODAL IS OPEN
           transition-all duration-300 ease-out backdrop-blur-sm`}
-        style={baseStyle}
-        onMouseDown={!isAnyModalOpen ? handleMouseDown : undefined}
-        onTouchStart={!isAnyModalOpen ? handleTouchStart : undefined}
-        onTouchEnd={!isAnyModalOpen ? handleTouchEnd : undefined}
+        style={{ 
+          ...baseStyle,
+          ...(effectiveMinimized ? { paddingTop: 8, paddingBottom: 8 } : undefined),
+          ...(isDragging ? {} : {
+            background: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
+            backdropFilter: 'blur(10px)',
+            borderColor: (() => {
+              if (loading) return 'rgb(75, 85, 99)';
+              if (!borderColoringEnabled) return 'rgb(75, 85, 99)';
+              
+              const currentColors = getCurrentColors();
+              
+              // Check if TAF contains the current scheme's below-minima color class
+              const hasBelowMinimaConditions = tafHtml && tafHtml.includes(currentColors.belowMinima.replace('text-', '')) && minimaFilterEnabled;
+              
+              // Also check METAR conditions if METAR filter is enabled
+              let metarBelowMinima = false;
+              if (metarFilterEnabled && metarRaw) {
+                const p = parseLine(metarRaw);
+                const visOk = p.isGreater ? true : (p.visMiles >= min.vis);
+                const ceilOk = p.ceiling >= min.ceiling;
+                metarBelowMinima = !(visOk && ceilOk);
+              }
+              
+              // Use below minima colors if either TAF or METAR (when enabled) are below minima
+              if (hasBelowMinimaConditions || metarBelowMinima) {
+                // Below minima colors
+                switch (currentColors.belowMinima) {
+                  case 'text-red-400':
+                  case 'text-red-500':
+                    return 'rgb(239, 68, 68)'; // red-500
+                  case 'text-orange-400':
+                    return 'rgb(249, 115, 22)'; // orange-500
+                  case 'text-yellow-400':
+                    return 'rgb(234, 179, 8)'; // yellow-500
+                  case 'text-blue-400':
+                    return 'rgb(59, 130, 246)'; // blue-500
+                  case 'text-cyan-400':
+                    return 'rgb(6, 182, 212)'; // cyan-500
+                  case 'text-purple-400':
+                    return 'rgb(168, 85, 247)'; // purple-500
+                  case 'text-pink-400':
+                    return 'rgb(236, 72, 153)'; // pink-500
+                  case 'text-white':
+                    return 'rgb(209, 213, 219)'; // gray-300
+                  case 'text-gray-300':
+                    return 'rgb(156, 163, 175)'; // gray-400
+                  default:
+                    return 'rgb(239, 68, 68)'; // fallback red-500
+                }
+              }
+              
+              // Above minima colors
+              switch (currentColors.aboveMinima) {
+                case 'text-green-400':
+                case 'text-green-300':
+                  return 'rgb(34, 197, 94)'; // green-500
+                case 'text-blue-300':
+                case 'text-blue-400':
+                  return 'rgb(59, 130, 246)'; // blue-500
+                case 'text-cyan-300':
+                case 'text-cyan-400':
+                  return 'rgb(6, 182, 212)'; // cyan-500
+                case 'text-white':
+                  return 'rgb(209, 213, 219)'; // gray-300
+                case 'text-gray-300':
+                  return 'rgb(156, 163, 175)'; // gray-400
+                default:
+                  return 'rgb(34, 197, 94)'; // fallback green-500
+              }
+            })()
+          })
+        }}
+        onMouseDown={!isAnyModalOpen ? handleMouseDown : undefined} // CONDITIONALLY ATTACH MOUSE DOWN
+        onTouchStart={!isAnyModalOpen ? handleTouchStart : undefined} // CONDITIONALLY ATTACH TOUCH START
+        onTouchEnd={!isAnyModalOpen ? handleTouchEnd : undefined} // CONDITIONALLY ATTACH TOUCH END
         aria-live="polite"
       >
-        {/* Remove button */}
+        {/* Enhanced Remove button with better animations - FIXED */}
         <button 
           onClick={(e) => {
             e.stopPropagation();
@@ -1374,13 +1403,12 @@ const WeatherTile = ({
           title={`Remove ${icao}`}
           aria-label={`Remove ${icao}`}
         >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 20 20" className
-          "transition-transform duration-200 hover:rotate-90">
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 20 20" className="transition-transform duration-200 hover:rotate-90">
             <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
           </svg>
         </button>
 
-        {/* Minimize toggle */}
+        {/* Enhanced Minimize toggle with better styling - FIXED */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1401,7 +1429,7 @@ const WeatherTile = ({
           </svg>
         </button>
 
-        {/* Title with drag handle */}
+        {/* Enhanced Title with gradient text and drag handle */}
         <div className="flex items-center justify-center gap-2 relative">
           {/* Drag handle - ONLY SHOW WHEN NO MODAL IS OPEN */}
           {!isAnyModalOpen && (
@@ -1422,7 +1450,7 @@ const WeatherTile = ({
           <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
         </div>
 
-        {/* Minima controls */}
+        {/* Minima controls with filter status indicator - FIXED */}
         <div className="flex gap-3 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
           <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300`}>
             Ceil: 
@@ -1477,10 +1505,13 @@ const WeatherTile = ({
           </div>
         )}
 
-        {/* NOTAM Button */}
+        {/* Enhanced NOTAM Button with modern styling - FIXED */}
         <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={handleNotamClick}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNotamClick(e);
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
             className="bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-600 hover:border-gray-500 shadow-sm hover:shadow-md hover:scale-105 backdrop-blur-sm"
@@ -1526,7 +1557,7 @@ const WeatherTile = ({
           </>
         )}
         
-        {/* NOTAM Modal */}
+        {/* NOTAM Modal - UPDATED with modal state tracking */}
         <NotamModal 
           icao={icao}
           isOpen={notamModalOpen}
@@ -1534,11 +1565,11 @@ const WeatherTile = ({
           notamData={notamData}
           loading={notamLoading}
           error={notamError}
-          onModalStateChange={handleNotamModalStateChange}
+          onModalStateChange={handleNotamModalStateChange} // PASS MODAL STATE CHANGE HANDLER
         />
       </div>
 
-      {/* Dragging clone - ONLY SHOW WHEN NO MODAL IS OPEN */}
+      {/* Enhanced dragging clone with premium effects - ONLY SHOW WHEN NO MODAL IS OPEN */}
       {isDragging && !isAnyModalOpen && (
         <div 
           className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl shadow-2xl p-4 border-2 border-cyan-400 backdrop-blur-md"
@@ -1549,7 +1580,7 @@ const WeatherTile = ({
         >
           <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
           <div className="mt-2 text-center text-cyan-400 text-sm font-medium animate-pulse flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
             Dragging...
             <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
           </div>
@@ -1642,7 +1673,7 @@ const WeatherMonitorApp = () => {
   const [icaoFilter, setIcaoFilter] = useState("");
   const [showFilteredOnly, setShowFilteredOnly] = useState(false);
 
-  // Modal state tracking
+  // Modal state tracking - NEW
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
 
   // Drag state with insertion position tracking
@@ -1652,7 +1683,7 @@ const WeatherMonitorApp = () => {
   const icaoInputRef = useRef(null);
   const filterInputRef = useRef(null);
 
-  // Modal state change handler
+  // Modal state change handler - NEW
   const handleNotamModalStateChange = (isOpen) => {
     setIsAnyModalOpen(isOpen);
   };
@@ -1945,7 +1976,7 @@ const WeatherMonitorApp = () => {
                 onClick={() => setSettingsPanelOpen(true)}
                 className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
               >
-                {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
+                🎨 {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
               </button>
             </div>
           </div>
@@ -1978,7 +2009,7 @@ const WeatherMonitorApp = () => {
 
         {/* ICAO Filter Controls */}
         <div className="flex flex-wrap justify-center gap-2 items-center bg-gray-700 rounded-lg p-4">
-          <span className="text-cyan-300 font-semibold">Filter:</span>
+          <span className="text-cyan-300 font-semibold">🔍 Filter:</span>
           <input 
             ref={filterInputRef}
             value={icaoFilter}
