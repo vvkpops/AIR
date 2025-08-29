@@ -27,7 +27,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
-      document.body.style.overflowY = 'scroll'; // Keep scrollbar to prevent layout shift
+      document.body.style.overflowY = 'scroll';
     } else {
       // Restore body styles
       document.body.style.position = '';
@@ -61,66 +61,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-
-  // Enhanced function to clean up NOTAM text for display
-  const cleanNotamText = (rawText) => {
-    if (!rawText || typeof rawText !== 'string') return rawText;
-    
-    // Check if this looks like CFPS JSON format
-    if (rawText.includes('"raw"') || rawText.includes('"english"')) {
-      try {
-        const jsonData = JSON.parse(rawText);
-        // Priority: english > raw (exclude french)
-        if (jsonData.english && typeof jsonData.english === 'string' && jsonData.english.trim()) {
-          return cleanText(jsonData.english);
-        } else if (jsonData.raw && typeof jsonData.raw === 'string' && jsonData.raw.trim()) {
-          return cleanText(jsonData.raw);
-        }
-      } catch (e) {
-        // Manual extraction if JSON parsing fails
-        const patterns = [
-          /"english"\s*:\s*"((?:[^"\\]|\\.)*)"/s,
-          /"raw"\s*:\s*"((?:[^"\\]|\\.)*)"/s
-        ];
-        
-        for (const pattern of patterns) {
-          const match = rawText.match(pattern);
-          if (match && match[1]) {
-            let extracted = match[1];
-            try {
-              // Properly unescape JSON string
-              extracted = JSON.parse('"' + extracted + '"');
-              return cleanText(extracted);
-            } catch (unescapeError) {
-              // Manual cleanup if JSON unescaping fails
-              extracted = extracted
-                .replace(/\\n/g, '\n')
-                .replace(/\\"/g, '"')
-                .replace(/\\\\/g, '\\');
-              return cleanText(extracted);
-            }
-          }
-        }
-      }
-    }
-    
-    return cleanText(rawText);
-  };
-
-  // Helper function for final text cleaning
-  const cleanText = (text) => {
-    if (!text || typeof text !== 'string') return text;
-    
-    return text
-      .replace(/\\n/g, '\n')           // Convert escaped newlines
-      .replace(/\\"/g, '"')            // Convert escaped quotes
-      .replace(/\\\\/g, '\\')          // Convert escaped backslashes
-      .replace(/\s+/g, ' ')            // Normalize whitespace
-      .replace(/\n\s+/g, '\n')         // Remove leading spaces on lines
-      .replace(/\s+\n/g, '\n')         // Remove trailing spaces on lines
-      .replace(/\n{3,}/g, '\n\n')      // Limit consecutive newlines
-      .trim();                         // Remove leading/trailing whitespace
-  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not specified';
@@ -233,10 +173,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                 const isPermanent = notam.validTo === 'PERMANENT';
                 const typeLabel = getNotamTypeLabel(notam);
                 
-                // Clean the NOTAM text
-                const cleanedBody = cleanNotamText(notam.body);
-                const cleanedSummary = cleanNotamText(notam.summary);
-                
                 return (
                   <div key={index} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden hover:border-gray-500 transition-colors">
                     <div className="bg-gray-800 px-6 py-4 border-b border-gray-600">
@@ -277,7 +213,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                     
                     {/* NOTAM Body */}
                     <div className="p-6 space-y-5">
-                      {(cleanedSummary || cleanedBody) && (
+                      {(notam.summary || notam.body) && (
                         <div>
                           <h5 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
                             <span>📝</span>
@@ -285,7 +221,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                           </h5>
                           <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-orange-500">
                             <pre className="text-gray-100 leading-relaxed text-sm whitespace-pre-wrap font-mono">
-                              {cleanedBody || cleanedSummary}
+                              {notam.body || notam.summary}
                             </pre>
                           </div>
                         </div>
@@ -325,21 +261,6 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                           </h6>
                           <p className="text-gray-200 font-mono text-xs">{notam.qLine}</p>
                         </div>
-                      )}
-                      
-                      {/* Raw text section - only show if significantly different from cleaned version */}
-                      {notam.body && notam.body !== cleanedBody && notam.body.length > cleanedBody.length + 50 && (
-                        <details className="group">
-                          <summary className="cursor-pointer text-gray-400 hover:text-gray-200 font-semibold flex items-center gap-2 p-2 bg-gray-800 rounded transition-colors group-open:bg-gray-700">
-                            <span className="transform group-open:rotate-90 transition-transform">▶</span>
-                            🔍 View Original Raw Text
-                          </summary>
-                          <div className="mt-3 bg-black p-4 rounded border border-gray-700">
-                            <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                              {notam.body}
-                            </pre>
-                          </div>
-                        </details>
                       )}
                     </div>
                   </div>
