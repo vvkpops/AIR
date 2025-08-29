@@ -62,85 +62,64 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
 
   if (!isOpen) return null;
 
-  // Helper function to clean up NOTAM text for display
+  // Enhanced function to clean up NOTAM text for display
   const cleanNotamText = (rawText) => {
     if (!rawText || typeof rawText !== 'string') return rawText;
     
-    // If this looks like the CFPS JSON response format, extract the actual NOTAM text
-    if (rawText.includes('"raw"') && rawText.includes('"english"')) {
+    // Remove excessive whitespace and normalize line breaks
+    let cleaned = rawText
+      .replace(/\\n/g, '\n')        // Convert \n to actual newlines
+      .replace(/\s+/g, ' ')         // Replace multiple spaces with single space
+      .replace(/\n\s+/g, '\n')      // Remove spaces at start of lines
+      .replace(/\s+\n/g, '\n')      // Remove spaces at end of lines
+      .replace(/\n{3,}/g, '\n\n')   // Replace multiple newlines with max 2
+      .trim();
+    
+    // If this still looks like escaped JSON, try to extract the meaningful parts
+    if (cleaned.includes('"raw"') || cleaned.includes('"english"') || cleaned.includes('"french"')) {
       try {
-        const jsonData = JSON.parse(rawText);
-        // Use the raw field which contains the actual NOTAM text
-        if (jsonData.raw) {
-          rawText = jsonData.raw;
-        } else if (jsonData.english) {
-          rawText = jsonData.english;
+        const jsonData = JSON.parse(cleaned);
+        // Priority: english > raw > french
+        if (jsonData.english && typeof jsonData.english === 'string') {
+          cleaned = jsonData.english.replace(/\\n/g, '\n');
+        } else if (jsonData.raw && typeof jsonData.raw === 'string') {
+          cleaned = jsonData.raw.replace(/\\n/g, '\n');
+        } else if (jsonData.french && typeof jsonData.french === 'string') {
+          cleaned = jsonData.french.replace(/\\n/g, '\n');
         }
       } catch (e) {
-        // If parsing fails, try to extract the raw text manually
-        const rawMatch = rawText.match(/"raw"\s*:\s*"([^"]+)"/);
-        if (rawMatch) {
-          rawText = rawMatch[1];
-        } else {
-          const englishMatch = rawText.match(/"english"\s*:\s*"([^"]+)"/);
-          if (englishMatch) {
-            rawText = englishMatch[1];
-          }
-        }
-      }
-    }
-    
-    // Now parse the actual NOTAM text to extract individual NOTAMs
-    // Replace \n in the string with actual newlines
-    rawText = rawText.replace(/\\n/g, '\n');
-    
-    // Find NOTAM blocks that start with NOTAM identifier and end after E) section
-    const notamBlocks = [];
-    const lines = rawText.split('\n');
-    let currentBlock = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Check if this line starts a new NOTAM (pattern like "Q1101/25 NOTAMN" or similar)
-      if (line.match(/^[A-Z]\d+\/\d+\s+NOTAM/) || (line.includes('NOTAM') && line.match(/\d+\/\d+/))) {
-        // Save previous block if it exists
-        if (currentBlock.length > 0) {
-          notamBlocks.push(currentBlock.join('\n'));
-        }
-        // Start new block
-        currentBlock = [line];
-      } else if (currentBlock.length > 0) {
-        // Add line to current block
-        currentBlock.push(line);
+        // Manual extraction if JSON parsing fails
+        const patterns = [
+          /"english"\s*:\s*"([^"]+)"/,
+          /"raw"\s*:\s*"([^"]+)"/,
+          /"french"\s*:\s*"([^"]+)"/
+        ];
         
-        // Check if this is the end of E) section
-        if (line.match(/^E\)\s/)) {
-          // Look ahead to see if next line is empty or starts a new NOTAM
-          if (i + 1 >= lines.length || lines[i + 1].trim() === '' || lines[i + 1].match(/^[A-Z]\d+\/\d+\s+NOTAM/)) {
-            // End current block here
-            notamBlocks.push(currentBlock.join('\n'));
-            currentBlock = [];
+        for (const pattern of patterns) {
+          const match = cleaned.match(pattern);
+          if (match && match[1]) {
+            cleaned = match[1].replace(/\\n/g, '\n');
+            break;
           }
         }
       }
     }
     
-    // Don't forget the last block
-    if (currentBlock.length > 0) {
-      notamBlocks.push(currentBlock.join('\n'));
-    }
+    // Final cleanup
+    cleaned = cleaned
+      .replace(/\\n/g, '\n')
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s+/g, '\n')
+      .replace(/\s+\n/g, '\n')
+      .trim();
     
-    // If we found NOTAM blocks, return them all joined with double newlines
-    // Otherwise return the cleaned text
-    if (notamBlocks.length > 0) {
-      return notamBlocks.join('\n\n');
-    }
-    
-    return rawText;
+    return cleaned;
   };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not specified';
+    if (dateStr === 'PERMANENT') return 'PERMANENT';
+    
     try {
       const date = new Date(dateStr);
       return date.toLocaleString('en-US', {
@@ -166,6 +145,21 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
     return 'bg-gray-600';
   };
 
+  const getNotamTypeLabel = (notam) => {
+    // Extract type from NOTAM number if available
+    if (notam.number) {
+      const firstChar = notam.number.charAt(0);
+      switch (firstChar.toUpperCase()) {
+        case 'Q': return 'AERODROME';
+        case 'H': return 'ENROUTE';
+        case 'V': return 'OBSTACLE';
+        case 'N': return 'NAVIGATION';
+        default: return notam.type || 'NOTAM';
+      }
+    }
+    return notam.type || 'NOTAM';
+  };
+
   // Render the modal using React Portal
   return ReactDOM.createPortal(
     <div className="modal-overlay modal-backdrop-blur modal-animate">
@@ -189,13 +183,14 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
             ×
           </button>
         </div>
+        
         {/* Content */}
         <div className="modal-body-scrollable p-6">
           {loading ? (
             <div className="text-center py-16">
               <div className="inline-block w-12 h-12 border-4 border-t-orange-500 border-gray-600 rounded-full animate-spin mb-4"></div>
-              <p className="text-xl text-orange-400 font-semibold mb-2">Fetching NOTAMs from FAA...</p>
-              <p className="text-gray-400">Please wait while we retrieve current NOTAMs</p>
+              <p className="text-xl text-orange-400 font-semibold mb-2">Fetching NOTAMs...</p>
+              <p className="text-gray-400">Checking FAA and NAV CANADA sources...</p>
             </div>
           ) : error ? (
             <div className="text-center py-16">
@@ -219,15 +214,23 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                     📊 Total NOTAMs Found: {notamData.length}
                   </span>
                   <span className="text-gray-400 text-sm">
-                    🔗 Source: FAA NOTAM System • Updated: {new Date().toLocaleTimeString()}
+                    🔗 Source: {icao.startsWith('C') ? 'FAA + NAV CANADA CFPS' : 'FAA NOTAM System'} • Updated: {new Date().toLocaleTimeString()}
                   </span>
                 </div>
               </div>
+              
               {/* NOTAM Cards */}
               {notamData.map((notam, index) => {
                 const priorityColor = getNotamPriorityColor(notam.summary || notam.description);
-                const isActive = notam.validFrom && notam.validTo ? 
+                const isActive = notam.validFrom && notam.validTo && notam.validTo !== 'PERMANENT' ? 
                   (new Date() >= new Date(notam.validFrom) && new Date() <= new Date(notam.validTo)) : true;
+                const isPermanent = notam.validTo === 'PERMANENT';
+                const typeLabel = getNotamTypeLabel(notam);
+                
+                // Clean the NOTAM text
+                const cleanedBody = cleanNotamText(notam.body);
+                const cleanedSummary = cleanNotamText(notam.summary);
+                
                 return (
                   <div key={index} className="bg-gray-900 rounded-lg border border-gray-600 overflow-hidden hover:border-gray-500 transition-colors">
                     <div className="bg-gray-800 px-6 py-4 border-b border-gray-600">
@@ -237,16 +240,21 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                             {notam.number || `NOTAM ${index + 1}`}
                           </span>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${priorityColor}`}>
-                            {notam.type || 'GENERAL'}
+                            {typeLabel}
                           </span>
-                          {isActive && (
+                          {isActive && !isPermanent && (
                             <span className="px-3 py-1 bg-green-600 text-white text-xs rounded-full font-bold animate-pulse">
                               ● ACTIVE
                             </span>
                           )}
-                          {notam.isPermanent && (
-                            <span className="px-3 py-1 bg-orange-600 text-white text-xs rounded-full font-bold">
+                          {isPermanent && (
+                            <span className="px-3 py-1 bg-red-600 text-white text-xs rounded-full font-bold">
                               PERMANENT
+                            </span>
+                          )}
+                          {icao.startsWith('C') && notam.number && notam.number.includes('CFPS') && (
+                            <span className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full font-bold">
+                              NAV CANADA
                             </span>
                           )}
                         </div>
@@ -260,86 +268,69 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
                         </div>
                       </div>
                     </div>
+                    
                     {/* NOTAM Body */}
                     <div className="p-6 space-y-5">
-                      {(notam.description || notam.summary) && (
+                      {(cleanedSummary || cleanedBody) && (
                         <div>
                           <h5 className="text-cyan-400 font-semibold mb-3 flex items-center gap-2">
                             <span>📝</span>
-                            Description
+                            NOTAM Text
                           </h5>
                           <div className="bg-gray-800 p-4 rounded-lg border-l-4 border-orange-500">
-                            <p className="text-gray-100 leading-relaxed text-base">
-                              {notam.description || notam.summary}
-                            </p>
+                            <pre className="text-gray-100 leading-relaxed text-sm whitespace-pre-wrap font-mono">
+                              {cleanedBody || cleanedSummary}
+                            </pre>
                           </div>
                         </div>
                       )}
+                      
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {(notam.validFrom || notam.bLine) && (
+                        {notam.validFrom && (
                           <div className="bg-gray-800 p-4 rounded-lg">
                             <h6 className="text-green-400 font-semibold mb-2 flex items-center gap-2">
                               <span>🟢</span>
                               Effective From
                             </h6>
                             <p className="text-gray-200 font-mono text-sm">
-                              {formatDate(notam.validFrom) || notam.bLine}
+                              {formatDate(notam.validFrom)}
                             </p>
                           </div>
                         )}
-                        {(notam.validTo || notam.cLine) && (
+                        
+                        {notam.validTo && (
                           <div className="bg-gray-800 p-4 rounded-lg">
                             <h6 className="text-red-400 font-semibold mb-2 flex items-center gap-2">
                               <span>🔴</span>
                               Valid Until
                             </h6>
                             <p className="text-gray-200 font-mono text-sm">
-                              {notam.isPermanent ? 'PERMANENT' : 
-                               (formatDate(notam.validTo) || notam.cLine)}
+                              {formatDate(notam.validTo)}
                             </p>
                           </div>
                         )}
                       </div>
-                      {notam.schedule && (
+                      
+                      {notam.qLine && (
                         <div className="bg-gray-800 p-4 rounded-lg">
                           <h6 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
-                            <span>📅</span>
-                            Schedule
+                            <span>📋</span>
+                            Q-Line Code
                           </h6>
-                          <p className="text-gray-200 font-mono text-sm">{notam.schedule}</p>
+                          <p className="text-gray-200 font-mono text-xs">{notam.qLine}</p>
                         </div>
                       )}
-                      {(notam.lowerLimit || notam.upperLimit || notam.coordinates) && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                          {notam.lowerLimit && (
-                            <div className="bg-gray-800 p-3 rounded">
-                              <span className="text-gray-400 font-semibold text-sm block mb-1">Lower Limit:</span>
-                              <p className="text-gray-200 font-mono text-sm">{notam.lowerLimit}</p>
-                            </div>
-                          )}
-                          {notam.upperLimit && (
-                            <div className="bg-gray-800 p-3 rounded">
-                              <span className="text-gray-400 font-semibold text-sm block mb-1">Upper Limit:</span>
-                              <p className="text-gray-200 font-mono text-sm">{notam.upperLimit}</p>
-                            </div>
-                          )}
-                          {notam.coordinates && (
-                            <div className="bg-gray-800 p-3 rounded">
-                              <span className="text-gray-400 font-semibold text-sm block mb-1">Coordinates:</span>
-                              <p className="text-gray-200 font-mono text-xs">{notam.coordinates}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {notam.rawText && (
+                      
+                      {/* Raw text section - only show if different from cleaned version */}
+                      {notam.body && notam.body !== cleanedBody && (
                         <details className="group">
                           <summary className="cursor-pointer text-gray-400 hover:text-gray-200 font-semibold flex items-center gap-2 p-2 bg-gray-800 rounded transition-colors group-open:bg-gray-700">
                             <span className="transform group-open:rotate-90 transition-transform">▶</span>
-                            🔍 View Raw NOTAM Text
+                            🔍 View Original Raw Text
                           </summary>
                           <div className="mt-3 bg-black p-4 rounded border border-gray-700">
                             <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap overflow-x-auto leading-relaxed">
-                              {notam.rawText}
+                              {notam.body}
                             </pre>
                           </div>
                         </details>
@@ -360,10 +351,11 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
             </div>
           )}
         </div>
+        
         {/* Footer */}
         <div className="modal-footer-fixed border-t border-gray-700 p-4 bg-gray-900 text-center rounded-b-xl">
           <p className="text-gray-400 text-sm">
-            📡 NOTAMs retrieved from FAA NOTAM Search System • 
+            📡 NOTAMs from {icao.startsWith('C') ? 'FAA + NAV CANADA CFPS' : 'FAA'} • 
             <span className="text-orange-400 font-semibold"> Always verify with official sources before flight</span>
           </p>
         </div>
