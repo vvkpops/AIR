@@ -1,5 +1,6 @@
 // Complete App.js with draggable weather cards like iPhone icons
 // Enhanced with Minima Filter Toggle, Color Customization, and ICAO Filter
+// Updated with interactive toggle buttons instead of settings panel for main controls
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
@@ -341,20 +342,14 @@ const ColorPicker = ({ label, value, onChange, className = "" }) => {
   );
 };
 
-// Settings Panel Component
+// Settings Panel Component - Simplified to only handle color schemes
 const SettingsPanel = ({ 
   isOpen, 
   onClose, 
-  minimaFilterEnabled, 
-  setMinimaFilterEnabled, 
   colorScheme, 
   setColorScheme,
   customColors,
-  setCustomColors,
-  borderColoringEnabled,
-  setBorderColoringEnabled,
-  metarFilterEnabled,
-  setMetarFilterEnabled
+  setCustomColors
 }) => {
   const modalRef = useRef(null);
 
@@ -388,7 +383,7 @@ const SettingsPanel = ({
     <div className="modal-overlay modal-backdrop-blur modal-animate">
       <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl">
         <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
-          <h3 className="text-xl font-bold text-cyan-400">Display Settings</h3>
+          <h3 className="text-xl font-bold text-cyan-400">🎨 Color Scheme Settings</h3>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
@@ -398,101 +393,12 @@ const SettingsPanel = ({
         </div>
         
         <div className="modal-body-scrollable p-6 space-y-6">
-          {/* Minima Filter Toggle */}
-          <div className="bg-gray-900 rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filters</h4>
-            
-            {/* TAF Filter */}
-            <div className="flex items-center gap-3 mb-4">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={minimaFilterEnabled}
-                  onChange={(e) => setMinimaFilterEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  minimaFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    minimaFilterEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code TAF text based on minima
-                </span>
-              </label>
-            </div>
-
-            {/* METAR Filter */}
-            <div className="flex items-center gap-3 mb-4">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={metarFilterEnabled}
-                  onChange={(e) => setMetarFilterEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  metarFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    metarFilterEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {metarFilterEnabled ? 'ON' : 'OFF'} - Color code METAR text based on minima
-                </span>
-              </label>
-            </div>
-            
-            {/* Border Coloring Toggle */}
-            <div className="flex items-center gap-3">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={borderColoringEnabled}
-                  onChange={(e) => setBorderColoringEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  borderColoringEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    borderColoringEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {borderColoringEnabled ? 'ON' : 'OFF'} - Color code tile borders based on minima
-                </span>
-              </label>
-            </div>
-            
-            <div className="mt-3 text-sm text-gray-400 space-y-1">
-              <p>
-                <strong>TAF Filter:</strong> {minimaFilterEnabled 
-                  ? 'TAF lines below minima will be highlighted in warning colors'
-                  : 'All TAF text will use the same base color regardless of conditions'
-                }
-              </p>
-              <p>
-                <strong>METAR Filter:</strong> {metarFilterEnabled 
-                  ? 'METAR text below minima will be highlighted in warning colors'
-                  : 'METAR text will use the base color regardless of conditions'
-                }
-              </p>
-              <p>
-                <strong>Border Coloring:</strong> {borderColoringEnabled 
-                  ? 'Tile borders will match your selected color scheme (above/below minima colors)'
-                  : 'All tile borders will be neutral gray'
-                }
-              </p>
-            </div>
-          </div>
-
           {/* Color Scheme Selection */}
           <div className="bg-gray-900 rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Color Schemes</h4>
+            <h4 className="text-lg font-semibold text-cyan-300 mb-4">Choose Color Scheme</h4>
+            <p className="text-gray-400 text-sm mb-4">
+              These colors apply when minima filters are enabled. Toggle filters using the buttons in the main toolbar.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
                 <button
@@ -567,7 +473,7 @@ const SettingsPanel = ({
             onClick={onClose}
             className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2 rounded-lg transition-colors"
           >
-            Apply Settings
+            Apply Colors
           </button>
         </div>
       </div>
@@ -1726,13 +1632,12 @@ const WeatherMonitorApp = () => {
           <button
             onClick={() => setSettingsPanelOpen(true)}
             className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2"
-            title="Display Settings"
+            title="Color Scheme Settings"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"></path>
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
             </svg>
-            Settings
+            Colors
           </button>
         </div>
       </div>
@@ -1761,32 +1666,71 @@ const WeatherMonitorApp = () => {
             {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
           </button>
 
-          {/* Filter Status Indicator */}
-          <div className="flex items-center gap-2 ml-4 text-sm">
-            <span className="text-gray-400">TAF:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {minimaFilterEnabled ? 'ON' : 'OFF'}
-            </span>
-            <span className="text-gray-400">METAR:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              metarFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {metarFilterEnabled ? 'ON' : 'OFF'}
-            </span>
+          {/* Interactive Filter Controls */}
+          <div className="flex flex-wrap items-center gap-3 ml-4 text-sm">
+            {/* TAF Filter Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">TAF:</span>
+              <button
+                onClick={() => setMinimaFilterEnabled(!minimaFilterEnabled)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 ${
+                  minimaFilterEnabled 
+                    ? 'bg-green-600 text-white shadow-md hover:bg-green-500' 
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
+                }`}
+                title={`${minimaFilterEnabled ? 'Disable' : 'Enable'} TAF minima color coding`}
+              >
+                {minimaFilterEnabled ? '✓ ON' : '✗ OFF'}
+              </button>
+            </div>
+
+            {/* METAR Filter Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">METAR:</span>
+              <button
+                onClick={() => setMetarFilterEnabled(!metarFilterEnabled)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 ${
+                  metarFilterEnabled 
+                    ? 'bg-green-600 text-white shadow-md hover:bg-green-500' 
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
+                }`}
+                title={`${metarFilterEnabled ? 'Disable' : 'Enable'} METAR minima color coding`}
+              >
+                {metarFilterEnabled ? '✓ ON' : '✗ OFF'}
+              </button>
+            </div>
+
             <span className="text-gray-400">|</span>
-            <span className="text-gray-400">Borders:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              borderColoringEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {borderColoringEnabled ? 'ON' : 'OFF'}
-            </span>
+
+            {/* Border Coloring Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Borders:</span>
+              <button
+                onClick={() => setBorderColoringEnabled(!borderColoringEnabled)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 ${
+                  borderColoringEnabled 
+                    ? 'bg-blue-600 text-white shadow-md hover:bg-blue-500' 
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
+                }`}
+                title={`${borderColoringEnabled ? 'Disable' : 'Enable'} border color coding based on minima`}
+              >
+                {borderColoringEnabled ? '✓ ON' : '✗ OFF'}
+              </button>
+            </div>
+
             <span className="text-gray-400">|</span>
-            <span className="text-gray-400">Colors:</span>
-            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
-              {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
-            </span>
+
+            {/* Color Scheme Indicator */}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Colors:</span>
+              <button
+                onClick={() => setSettingsPanelOpen(true)}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-full text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
+                title="Change color scheme"
+              >
+                🎨 {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1897,7 +1841,7 @@ const WeatherMonitorApp = () => {
               Add ICAO codes above to start monitoring weather conditions
             </p>
             <p className="text-gray-400 mt-2 text-sm">
-              Use the Settings button to configure color coding and minima filtering
+              Use the Colors button to configure color schemes and the toggle buttons to enable minima filtering
             </p>
           </div>
         )}
@@ -1907,16 +1851,10 @@ const WeatherMonitorApp = () => {
       <SettingsPanel
         isOpen={settingsPanelOpen}
         onClose={() => setSettingsPanelOpen(false)}
-        minimaFilterEnabled={minimaFilterEnabled}
-        setMinimaFilterEnabled={setMinimaFilterEnabled}
         colorScheme={colorScheme}
         setColorScheme={setColorScheme}
         customColors={customColors}
         setCustomColors={setCustomColors}
-        borderColoringEnabled={borderColoringEnabled}
-        setBorderColoringEnabled={setBorderColoringEnabled}
-        metarFilterEnabled={metarFilterEnabled}
-        setMetarFilterEnabled={setMetarFilterEnabled}
       />
     </div>
   );
