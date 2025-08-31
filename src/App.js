@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 import KeywordHighlightManager, { highlightKeywords } from './KeywordHighlight';
+import NotamModal from './NotamModal';
 
 // Weather utilities
 const TAF_CACHE_MS = 600000; // 10 minutes
@@ -186,7 +187,7 @@ function highlightTAFWithOptions(raw, minC, minV, filterEnabled, colorScheme, ke
     const meetsMinima = visOk && ceilOk;
     
     // Apply keyword highlighting first if enabled
-    let processedLine = keywordEnabled ? highlightKeywords(line, keywordCategories, true) : line;
+    let processedLine = keywordEnabled ? highlightKeywords(line, keywordCategories) : line;
     
     // If filter is disabled, use base color for all text
     if (!filterEnabled) {
@@ -485,93 +486,6 @@ const SettingsPanel = ({
   );
 };
 
-// Simple NOTAM Modal
-const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
-  const modalRef = useRef(null);
-  
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.body.classList.add('modal-open');
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.body.classList.remove('modal-open');
-    };
-  }, [isOpen, onClose]);
-  
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') onClose();
-    };
-    if (isOpen) document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
-  
-  if (!isOpen) return null;
-
-  return ReactDOM.createPortal(
-    <div className="modal-overlay modal-backdrop-blur modal-animate">
-      <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600">
-        <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
-          <div>
-            <h3 className="text-xl font-bold text-cyan-400">Raw NOTAMs for {icao}</h3>
-          </div>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
-            title="Close NOTAMs"
-          >
-            ×
-          </button>
-        </div>
-        <div className="modal-body-scrollable p-6">
-          {loading ? (
-            <div className="text-center py-16">
-              <div className="inline-block w-12 h-12 border-4 border-t-orange-500 border-gray-600 rounded-full animate-spin mb-4"></div>
-              <p className="text-xl text-orange-400 font-semibold mb-2">Fetching NOTAMs...</p>
-            </div>
-          ) : error ? (
-            <div className="text-center py-16">
-              <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="text-white text-3xl">⚠️</span>
-              </div>
-              <h4 className="text-xl text-red-400 font-semibold mb-3">Error Loading NOTAMs</h4>
-              <p className="text-gray-400 mb-4">{error}</p>
-              <button 
-                onClick={onClose}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          ) : notamData && notamData.length > 0 ? (
-            <div>
-              {notamData.map((notam, idx) => (
-                <pre
-                  key={idx}
-                  className="bg-black text-green-400 text-xs font-mono whitespace-pre-wrap mb-6 p-3 rounded border border-gray-700"
-                >
-{notam.body || notam.summary || notam.rawText || ''}
-                </pre>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16 text-gray-400">
-              No active NOTAMs found for {icao}.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.getElementById('modal-root')
-  );
-};
 // Weather Tile Component with enhanced mobile support and keyword highlighting
 const WeatherTile = ({ 
   icao, 
@@ -660,7 +574,7 @@ const WeatherTile = ({
     fetchData();
     const intervalId = setInterval(fetchData, 300000);
     return () => clearInterval(intervalId);
-  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme, metarFilterEnabled, keywordCategories, keywordHighlightEnabled]);
+  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme, metarFilterEnabled, keywordCategories, keywordHighlightEnabled, customColors]);
 
   // Function to get METAR color class based on conditions
   const getMETARColorClass = () => {
@@ -681,7 +595,7 @@ const WeatherTile = ({
   // Function to get processed METAR text with keyword highlighting
   const getProcessedMETARText = () => {
     if (keywordHighlightEnabled) {
-      return highlightKeywords(metarRaw, keywordCategories, true);
+      return highlightKeywords(metarRaw, keywordCategories);
     }
     return metarRaw;
   };
@@ -689,7 +603,7 @@ const WeatherTile = ({
   // Update custom colors in COLOR_PRESETS when customColors change
   useEffect(() => {
     if (colorScheme === 'custom') {
-      COLOR_PRESETS.custom = customColors;
+      COLOR_PRESETS.custom = { ...COLOR_PRESETS.custom, ...customColors };
     }
   }, [customColors, colorScheme]);
 
@@ -896,7 +810,8 @@ const WeatherTile = ({
             aLine: item.location || icao,
             bLine: item.validFrom || '',
             cLine: item.validTo || '',
-            isPermanent: item.validTo ? item.validTo.includes('PERM') : false
+            isPermanent: item.validTo ? item.validTo.includes('PERM') : false,
+            body: item.body || item.summary || ''
           });
         });
       }
@@ -1062,7 +977,7 @@ const WeatherTile = ({
           title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
           aria-pressed={effectiveMinimized}
           disabled={globalMinimized}
-          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gradient-to-br from-gray-600 to-gray-700' : 'bg-gradient-to-br from-gray-800 to-gray-900'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-gray-600 hover:scale-105 transition-all duration-200 backdrop-blur-sm hover:shadow-cyan-500/25`}
+          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gradient-to-br from-gray-600 to-gray-700' : 'bg-gradient-to-br from-gray-800 to-gray-900'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-gray-600 hover:scale-105 transition-all duration-200 backdrop-blur-sm`}
           style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${effectiveMinimized ? 'rotate-180' : ''}`}>
@@ -1304,7 +1219,8 @@ const WeatherMonitorApp = () => {
 
   const [keywordCategories, setKeywordCategories] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("keywordCategories") || JSON.stringify(DEFAULT_KEYWORDS));
+      const saved = localStorage.getItem("keywordCategories");
+      return saved ? JSON.parse(saved) : DEFAULT_KEYWORDS;
     } catch (e) {
       return DEFAULT_KEYWORDS;
     }
@@ -1418,7 +1334,7 @@ const WeatherMonitorApp = () => {
     
     const inputValue = icaoInputRef.current.value.toUpperCase();
     const icaos = inputValue
-      .split(",")
+      .split(/[,\s]+/)
       .map(s => s.trim())
       .filter(s => s.length === 4 && /^[A-Z0-9]{4}$/.test(s));
 
@@ -1751,7 +1667,7 @@ const WeatherMonitorApp = () => {
           <div className="text-center py-12">
             <div className="text-gray-400 text-lg mb-4">
               <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
               </svg>
               No stations match your filter
             </div>
@@ -1807,6 +1723,7 @@ const WeatherMonitorApp = () => {
         setKeywordCategories={setKeywordCategories}
         keywordHighlightEnabled={keywordHighlightEnabled}
         setKeywordHighlightEnabled={setKeywordHighlightEnabled}
+        defaultKeywords={DEFAULT_KEYWORDS}
       />
     </div>
   );
