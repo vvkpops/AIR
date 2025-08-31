@@ -1,4 +1,468 @@
-/* Append these styles to the end of your existing src/index.css file */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom scrollbar for better appearance */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Loading animation for weather data */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Smooth transitions for interactive elements */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Fixed Modal positioning and scrolling CSS */
+
+/* Ensure modal overlay stays fixed and covers entire viewport */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: 16px !important;
+}
+
+/* Ensure modal content doesn't move and is properly sized */
+.modal-content-fixed {
+  position: relative !important;
+  transform: none !important;
+  margin: 0 !important;
+  max-width: 95vw !important;
+  max-height: 95vh !important;
+  width: 100% !important;
+  max-width: 1200px !important; /* Reasonable max width */
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background-color: #1f2937 !important; /* gray-800 */
+  border-radius: 12px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Prevent body scroll when modal is open */
+.modal-open {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  height: 100vh !important;
+}
+
+/* Scrollable content area within modal */
+.modal-body-scrollable {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: calc(95vh - 160px) !important; /* Account for header and footer */
+  flex: 1 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #6b7280 #374151 !important;
+}
+
+/* Custom scrollbar for webkit browsers */
+.modal-body-scrollable::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.modal-body-scrollable::-webkit-scrollbar-track {
+  background: #374151 !important; /* gray-700 */
+}
+
+.modal-body-scrollable::-webkit-scrollbar-thumb {
+  background: #6b7280 !important; /* gray-500 */
+  border-radius: 4px !important;
+}
+
+.modal-body-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af !important; /* gray-400 */
+}
+
+/* Ensure modal header and footer stay in place */
+.modal-header-fixed,
+.modal-footer-fixed {
+  position: relative !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
+}
+
+/* Animation for modal appearance */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-animate {
+  animation: modalSlideIn 0.2s ease-out !important;
+}
+
+/* Responsive modal sizing */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 8px !important;
+  }
+  
+  .modal-content-fixed {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 8px !important;
+  }
+  
+  .modal-body-scrollable {
+    max-height: calc(100vh - 140px) !important;
+  }
+}
+
+/* Backdrop blur effect for better visual separation */
+.modal-backdrop-blur {
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* Focus management */
+.modal-overlay:focus {
+  outline: none !important;
+}
+
+/* Ensure no conflicting transforms */
+.modal-overlay *,
+.modal-content-fixed *,
+.modal-body-scrollable * {
+  box-sizing: border-box !important;
+}
+
+/* Smooth scrolling within modal */
+.modal-body-scrollable {
+  scroll-behavior: smooth !important;
+}
+/* Add these enhanced animations to your src/index.css file */
+
+/* Wiggle animation for long press feedback */
+@keyframes wiggle {
+  0%, 100% { 
+    transform: rotate(-2deg) scale(1.02); 
+  }
+  25% { 
+    transform: rotate(2deg) scale(1.02); 
+  }
+  50% { 
+    transform: rotate(-1deg) scale(1.02); 
+  }
+  75% { 
+    transform: rotate(1deg) scale(1.02); 
+  }
+}
+
+/* Floating animation for dragged items */
+@keyframes dragFloat {
+  0%, 100% { 
+    transform: rotate(8deg) scale(1.1) translateY(0px); 
+  }
+  50% { 
+    transform: rotate(8deg) scale(1.1) translateY(-5px); 
+  }
+}
+
+/* Enhanced pulse with glow effect */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 10px rgba(6, 182, 212, 0);
+  }
+}
+
+/* Smooth bounce for insertion indicators */
+@keyframes smoothBounce {
+  0%, 100% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+/* Ripple effect for drop zones */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Shimmer effect for loading states */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Add these utility classes for enhanced animations */
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out infinite;
+}
+
+.animate-drag-float {
+  animation: dragFloat 2s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 1s ease-in-out infinite;
+}
+
+.animate-smooth-bounce {
+  animation: smoothBounce 1s infinite;
+}
+
+/* Enhanced backdrop blur with better browser support */
+.backdrop-blur-enhanced {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+/* Gradient text with fallback */
+.gradient-text {
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Modern glass morphism effect */
+.glass-morphism {
+  background: rgba(31, 41, 55, 0.8);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.125);
+}
+
+/* Enhanced button hover effects */
+.button-enhanced {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.button-enhanced::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.button-enhanced:hover::before {
+  left: 100%;
+}
+
+/* Smooth card transitions */
+.card-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.card-transition:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+              0 10px 10px -5px rgba(0, 0, 0, 0.04),
+              0 0 0 1px rgba(6, 182, 212, 0.1);
+}
+
+/* Loading skeleton with shimmer */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, 
+    rgba(55, 65, 81, 1) 0%, 
+    rgba(75, 85, 99, 1) 50%, 
+    rgba(55, 65, 81, 1) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Improved scroll animations */
+.scroll-smooth {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 114, 128, 0.5) rgba(55, 65, 81, 0.5);
+}
+
+/* Modern focus rings */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.2);
+}
+/* Add these additional styles to your existing index.css file */
+
+/* Enhanced text selection styling */
+.select-text {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* Custom text selection colors */
+.select-text::selection {
+  background-color: rgba(6, 182, 212, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.select-text::-moz-selection {
+  background-color: rgba(6, 182, 212, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* Hover effects for selectable text areas */
+.cursor-text:hover {
+  background-color: rgba(55, 65, 81, 0.5) !important;
+  border-color: rgba(107, 114, 128, 0.5) !important;
+}
+
+/* Enhanced modal positioning - even better scroll lock */
+.modal-open {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  height: 100vh !important;
+}
+
+/* Prevent text selection on modal controls but allow in content */
+.modal-header-fixed,
+.modal-footer-fixed {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Copy button animation */
+@keyframes copySuccess {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.copy-success {
+  animation: copySuccess 0.3s ease-in-out;
+}
+
+/* Better focus management for accessibility */
+.modal-content-fixed:focus {
+  outline: none !important;
+}
+
+.modal-content-fixed [tabindex]:focus {
+  outline: 2px solid #06b6d4 !important;
+  outline-offset: 2px !important;
+}
+
+/* Improve mobile text selection */
+@media (max-width: 768px) {
+  .select-text {
+    -webkit-touch-callout: default !important;
+    -webkit-user-select: text !important;
+  }
+}
+
+/* Text selection feedback */
+.text-selection-active {
+  background-color: rgba(6, 182, 212, 0.1) !important;
+  border-color: rgba(6, 182, 212, 0.3) !important;
+}
+/* Additional CSS to add to your src/index.css file */
 
 /* Keyword highlighting styles */
 .keyword-highlight {
@@ -60,4 +524,332 @@
 .keyword-highlight.bg-indigo-500 {
   background-color: rgb(99 102 241) !important;
   color: white !important;
+}
+
+/* Enhanced mobile responsiveness */
+@media (max-width: 640px) {
+  /* Make tiles stack better on mobile */
+  .grid-cols-1 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  /* Better mobile modal sizing */
+  .modal-content-fixed {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 0 !important;
+  }
+  
+  .modal-overlay {
+    padding: 8px !important;
+  }
+  
+  /* Adjust font sizes for mobile */
+  .text-2xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+  
+  .text-3xl {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+  
+  /* Better mobile button spacing */
+  .flex-wrap {
+    gap: 0.5rem;
+  }
+  
+  /* Improve mobile touch targets */
+  button, input, select, textarea {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-friendly drag indicators */
+  .cursor-grab,
+  .cursor-grabbing {
+    cursor: pointer;
+  }
+  
+  /* Better mobile scrolling */
+  .modal-body-scrollable {
+    max-height: calc(90vh - 140px) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Improved touch handling */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch device optimizations */
+  .hover\:scale-\[1\.02\]:hover {
+    transform: none;
+  }
+  
+  .hover\:shadow-xl:hover {
+    box-shadow: none;
+  }
+  
+  /* Better touch feedback */
+  button:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  
+  /* Larger touch targets */
+  .absolute.top-2.right-2,
+  .absolute.left-2.top-2 {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Improved animations for mobile */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-pulse,
+  .animate-bounce,
+  .animate-wiggle,
+  .animate-drag-float {
+    animation: none;
+  }
+  
+  .transition-all,
+  .transition-colors,
+  .transition-transform {
+    transition: none;
+  }
+}
+
+/* Better contrast for accessibility */
+@media (prefers-contrast: high) {
+  .keyword-highlight {
+    border: 2px solid currentColor;
+    font-weight: 900;
+  }
+  
+  .bg-gray-800,
+  .bg-gray-900 {
+    background-color: rgb(0 0 0) !important;
+    border-color: rgb(255 255 255) !important;
+  }
+  
+  .text-gray-300,
+  .text-gray-400 {
+    color: rgb(255 255 255) !important;
+  }
+}
+
+/* Responsive grid improvements */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) and (max-width: 1536px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Enhanced keyword highlight hover effects */
+.keyword-highlight:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  position: relative;
+}
+
+/* Better focus indicators for accessibility */
+.focus-ring:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.2);
+}
+
+/* Smooth transitions for keyword highlights */
+.keyword-highlight {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile-optimized input styling */
+@media (max-width: 640px) {
+  input[type="number"],
+  input[type="text"],
+  textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+/* Improved drag feedback for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .animate-wiggle {
+    animation: wiggle 0.3s ease-in-out 2;
+  }
+  
+  /* Enhanced touch feedback for draggable items */
+  [data-icao] {
+    -webkit-tap-highlight-color: rgba(6, 182, 212, 0.2);
+  }
+}
+
+/* Loading state improvements */
+.animate-spin {
+  animation-duration: 1s;
+}
+
+/* Better modal stacking on mobile */
+@media (max-width: 640px) {
+  .modal-overlay {
+    z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  .modal-content-fixed {
+    position: relative;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+/* Improved visibility for drag indicators */
+.cursor-grab svg,
+.cursor-grabbing svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Better contrast for keyword tooltips */
+.keyword-highlight[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 20;
+  margin-bottom: 4px;
+}
+
+/* Responsive text scaling */
+@media (max-width: 480px) {
+  .text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  
+  .text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  
+  /* Smaller padding on very small screens */
+  .p-4 {
+    padding: 0.75rem;
+  }
+  
+  .p-6 {
+    padding: 1rem;
+  }
+}
+
+/* Performance optimizations */
+.bg-gradient-to-br,
+.bg-gradient-to-r {
+  will-change: transform;
+}
+
+/* Drag performance optimization */
+[data-icao] {
+  contain: layout style;
+}
+
+/* Smooth scrolling for modals */
+.modal-body-scrollable {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Better status indicator visibility */
+.bg-green-600,
+.bg-yellow-600,
+.bg-red-600 {
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Enhanced border coloring with gradients */
+.border-red-500 {
+  border-image: linear-gradient(45deg, rgb(239 68 68), rgb(220 38 38)) 1;
+}
+
+.border-green-500 {
+  border-image: linear-gradient(45deg, rgb(34 197 94), rgb(21 128 61)) 1;
+}
+
+.border-orange-500 {
+  border-image: linear-gradient(45deg, rgb(249 115 22), rgb(234 88 12)) 1;
+}
+
+.border-cyan-500 {
+  border-image: linear-gradient(45deg, rgb(6 182 212), rgb(14 116 144)) 1;
+}
+
+/* Grid gap improvements for different screen sizes */
+@media (max-width: 640px) {
+  .gap-4.sm\:gap-6 {
+    gap: 0.75rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .gap-4.sm\:gap-6 {
+    gap: 1rem;
+  }
+}
+
+/* Better visual hierarchy for weather data */
+.font-mono {
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Enhanced loading states */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, 
+    rgba(55, 65, 81, 1) 0%, 
+    rgba(75, 85, 99, 1) 50%, 
+    rgba(55, 65, 81, 1) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
