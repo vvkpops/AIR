@@ -136,16 +136,16 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   };
 
   // Copy to clipboard function
-  const copyToClipboard = async (text, notamNumber = '') => {
+  const copyToClipboard = async (event, text, notamNumber = '') => {
     try {
       await navigator.clipboard.writeText(text);
       // Show a brief success indicator
-      const button = event.target;
-      const originalText = button.textContent;
-      button.textContent = '✓ Copied!';
+      const button = event.currentTarget;
+      const originalText = button.innerHTML;
+      button.innerHTML = '✓ Copied!';
       button.classList.add('bg-green-600');
       setTimeout(() => {
-        button.textContent = originalText;
+        button.innerHTML = originalText;
         button.classList.remove('bg-green-600');
       }, 2000);
     } catch (err) {
@@ -167,7 +167,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   };
 
   // Copy all NOTAMs function
-  const copyAllNotams = () => {
+  const copyAllNotams = (event) => {
     if (!notamData || notamData.length === 0) return;
     
     const allNotamsText = notamData.map((notam, index) => {
@@ -191,7 +191,7 @@ Total NOTAMs: ${notamData.length}
 
 ${allNotamsText}`;
     
-    copyToClipboard(fullText);
+    copyToClipboard(event, fullText);
   };
 
   const formatDate = (dateStr) => {
@@ -361,7 +361,7 @@ ${allNotamsText}`;
                           )}
                           {/* Individual Copy Button */}
                           <button
-                            onClick={() => copyToClipboard(displayText || 'No text available', notam.number)}
+                            onClick={(e) => copyToClipboard(e, displayText || 'No text available', notam.number)}
                             className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
                             title="Copy this NOTAM to clipboard"
                           >
@@ -465,7 +465,7 @@ ${allNotamsText}`;
                               {notam.body}
                             </div>
                             <button
-                              onClick={() => copyToClipboard(notam.body, notam.number)}
+                              onClick={(e) => copyToClipboard(e, notam.body, notam.number)}
                               className="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors"
                               title="Copy raw text"
                             >
