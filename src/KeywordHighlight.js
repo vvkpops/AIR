@@ -371,7 +371,7 @@ export const highlightKeywords = (text, keywordCategories) => {
   }
 
   // Create a regex that finds any of the keywords as whole words
-  const regex = new RegExp(`\\b(${allKeywords.map(k => k.keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g');
+  const regex = new RegExp(`\\b(${allKeywords.map(k => k.keyword.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g');
   
   // Create a map for quick lookup of keyword to category
   const keywordMap = allKeywords.reduce((acc, { keyword, category }) => {
