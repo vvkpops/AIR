@@ -75,19 +75,15 @@ code {
   width: 100vw !important;
   height: 100vh !important;
   z-index: 9999 !important;
-  background-color: rgba(0, 0, 0, 0.8) !important;
+  /* CORRECTED: Reduced opacity and added a blur for a see-through effect */
+  background-color: rgba(17, 24, 39, 0.4) !important;
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
   padding: 16px !important;
-}
-
-/* New class for a more transparent, interactive backdrop */
-.modal-backdrop-interactive {
-  background-color: rgba(17, 24, 39, 0.4) !important; /* gray-900 with 40% opacity */
-  backdrop-filter: blur(2px) !important;
-  -webkit-backdrop-filter: blur(2px) !important;
 }
 
 /* Ensure modal content doesn't move and is properly sized */
