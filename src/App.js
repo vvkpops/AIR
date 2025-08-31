@@ -288,37 +288,83 @@ const SettingsPanel = ({
   setMetarFilterEnabled
 }) => {
   const modalRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const handleMouseDown = (e) => {
+    // Only drag from the header
+    if (!e.target.classList.contains('modal-header-fixed') && !e.target.closest('.modal-header-fixed')) {
+      return;
+    }
+    setIsDragging(true);
+    const modalRect = modalRef.current.getBoundingClientRect();
+    setOffset({
+      x: e.clientX - modalRect.left,
+      y: e.clientY - modalRect.top,
+    });
+    // Prevent text selection while dragging
+    e.preventDefault();
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - offset.x,
+        y: e.clientY - offset.y,
+      });
+    }
+  }, [isDragging, offset]);
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
-    
+  }, [isDragging, handleMouseMove]);
+
+  useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') onClose();
     };
-
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleEscape);
-      document.body.classList.add('modal-open');
+      // Center modal on first open
+      if (modalRef.current) {
+        const { innerWidth, innerHeight } = window;
+        const { offsetWidth, offsetHeight } = modalRef.current;
+        setPosition({ x: (innerWidth - offsetWidth) / 2, y: (innerHeight - offsetHeight) / 2 });
+      }
     }
-
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
-      document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(
-    <div className="modal-overlay modal-backdrop-interactive modal-animate">
-      <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl">
-        <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
+    <div className="modal-overlay modal-animate" style={{ alignItems: 'flex-start', justifyContent: 'flex-start', pointerEvents: isDragging ? 'auto' : 'none' }}>
+      <div 
+        ref={modalRef} 
+        className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl"
+        style={{ 
+          transform: `translate(${position.x}px, ${position.y}px)`, 
+          pointerEvents: 'auto' 
+        }}
+      >
+        <div 
+          className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+        >
           <h3 className="text-xl font-bold text-cyan-400">Display Settings</h3>
           <button 
             onClick={onClose}
