@@ -1,5 +1,5 @@
 // Complete App.js with draggable weather cards, keyword highlighting, and mobile optimization
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 import KeywordHighlightManager, { highlightKeywords } from './KeywordHighlight';
@@ -614,7 +614,7 @@ const WeatherTile = ({
   }, [minimized, storageKey]);
 
   // Drag event handlers
-  const handleDragStart = (e, isTouch = false) => {
+  const handleDragStart = useCallback((e, isTouch = false) => {
     if (!isLongPressed && isTouch) return;
 
     e.preventDefault();
@@ -632,9 +632,9 @@ const WeatherTile = ({
     setDragPosition({ x: clientX - offset.x, y: clientY - offset.y });
     setIsDragging(true);
     onDragStart(icao);
-  };
+  }, [isLongPressed, onDragStart, icao]);
 
-  const handleDragMove = (e, isTouch = false) => {
+  const handleDragMove = useCallback((e, isTouch = false) => {
     if (!isDragging) return;
     
     e.preventDefault();
@@ -662,16 +662,16 @@ const WeatherTile = ({
       
       onReorder(icao, tileBelow.dataset.icao, insertAfter);
     }
-  };
+  }, [isDragging, dragOffset, icao, onReorder]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     if (!isDragging) return;
     
     setIsDragging(false);
     setIsLongPressed(false);
     setDragPosition({ x: 0, y: 0 });
     onDragEnd();
-  };
+  }, [isDragging, onDragEnd]);
 
   // Long press handling for touch devices
   const handleTouchStart = (e) => {
@@ -692,7 +692,7 @@ const WeatherTile = ({
     }, 500); // 500ms long press
   };
 
-  const handleTouchEnd = (e) => {
+  const handleTouchEnd = useCallback((e) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
     }
@@ -701,7 +701,7 @@ const WeatherTile = ({
     } else {
       handleDragEnd();
     }
-  };
+  }, [isDragging, handleDragEnd]);
 
   // Mouse event handlers
   const handleMouseDown = (e) => {
@@ -715,16 +715,16 @@ const WeatherTile = ({
     handleDragStart(e, false);
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = useCallback((e) => {
     handleDragMove(e, false);
-  };
+  }, [handleDragMove]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     handleDragEnd();
-  };
+  }, [handleDragEnd]);
 
   // Touch event handlers
-  const handleTouchMove = (e) => {
+  const handleTouchMove = useCallback((e) => {
     if (isLongPressed) {
       if (!isDragging) {
         const touch = e.touches[0];
@@ -742,7 +742,7 @@ const WeatherTile = ({
         handleDragMove(e, true);
       }
     }
-  };
+  }, [isLongPressed, isDragging, handleDragStart, handleDragMove]);
 
   // Add global event listeners
   useEffect(() => {
@@ -759,7 +759,7 @@ const WeatherTile = ({
         document.removeEventListener('touchend', handleTouchEnd);
       };
     }
-  }, [isDragging, isLongPressed, dragOffset]);
+  }, [isDragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   const toggleMinimize = () => setMinimized(prev => !prev);
 
