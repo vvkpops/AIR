@@ -1559,43 +1559,59 @@ const WeatherMonitorApp = () => {
           </button>
         </div>
 
-        {/* Mobile-friendly status indicators */}
+        {/* Interactive status indicators */}
         <div className="flex flex-wrap justify-center gap-2 text-xs bg-gray-800 rounded-lg p-3 mb-2">
-          <div className="flex items-center gap-1">
-            <span className="text-gray-400">TAF:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
+          <button 
+            onClick={() => setMinimaFilterEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle TAF color coding"
+          >
+            <span className="text-gray-400 font-medium pl-2">TAF Filter:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
               minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {minimaFilterEnabled ? 'ON' : 'OFF'}
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-gray-400">METAR:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
+          </button>
+          <button 
+            onClick={() => setMetarFilterEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle METAR color coding"
+          >
+            <span className="text-gray-400 font-medium pl-2">METAR Filter:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
               metarFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {metarFilterEnabled ? 'ON' : 'OFF'}
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-gray-400">Keywords:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
+          </button>
+          <button 
+            onClick={() => setKeywordHighlightEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle keyword highlighting"
+          >
+            <span className="text-gray-400 font-medium pl-2">Keywords:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
               keywordHighlightEnabled ? 'bg-yellow-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {keywordHighlightEnabled ? 'ON' : 'OFF'}
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-gray-400">Borders:</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
+          </button>
+          <button 
+            onClick={() => setBorderColoringEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle tile border coloring"
+          >
+            <span className="text-gray-400 font-medium pl-2">Borders:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
               borderColoringEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
             }`}>
               {borderColoringEnabled ? 'ON' : 'OFF'}
             </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-gray-400">Colors:</span>
-            <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
+          </button>
+          <div className="flex items-center gap-1.5 p-1">
+            <span className="text-gray-400 font-medium pl-2">Colors:</span>
+            <span className="px-2.5 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs">
               {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
             </span>
           </div>
