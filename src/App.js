@@ -707,8 +707,8 @@ const WeatherTile = ({
         </div>
 
 
-        {/* Minima and NOTAM controls */}
-        <div className="flex flex-wrap gap-x-4 gap-y-2 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                {/* Minima and NOTAM controls */}
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-2">
             <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
               Ceil: 
