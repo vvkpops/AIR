@@ -3,6 +3,607 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import KeywordHighlightManager, { highlightKeywords } from './KeywordHighlight';
 import NotamModal from './NotamModal';
+import PasswordScreen from './PasswordScreen';
+
+// --- Main App Component with Authentication ---
+const App = () => {
+  // Check session storage to see if user is already authenticated
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    sessionStorage.getItem('isAuthenticated') === 'true'
+  );
+
+  // This function is called by PasswordScreen on successful login
+  const handleAuthenticated = () => {
+    sessionStorage.setItem('isAuthenticated', 'true');
+    setIsAuthenticated(true);
+  };
+
+  // If not authenticated, show the password screen
+  if (!isAuthenticated) {
+    return <PasswordScreen onAuthenticated={handleAuthenticated} />;
+  }
+
+  // If authenticated, show the main weather dashboard
+  return <WeatherMonitorApp />;
+};
+
+
+// --- Weather Dashboard Application ---
+const WeatherMonitorApp = () => {
+  // State variables
+  const [globalWeatherMinima, setGlobalWeatherMinima] = useState(
+    JSON.parse(localStorage.getItem("globalWeatherMinima") || '{"ceiling":500,"vis":1}')
+  );
+  
+  const [weatherMinima, setWeatherMinima] = useState(
+    JSON.parse(localStorage.getItem("weatherMinima") || "{}")
+  );
+  
+  const [weatherICAOs, setWeatherICAOs] = useState(
+    JSON.parse(localStorage.getItem("weatherICAOs") || "[]")
+  );
+  
+  const [globalWeatherCeiling, setGlobalWeatherCeiling] = useState(globalWeatherMinima.ceiling);
+  const [globalWeatherVis, setGlobalWeatherVis] = useState(globalWeatherMinima.vis);
+  
+  const [globalWeatherMinimized, setGlobalWeatherMinimized] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("globalWeatherMinimized") || "false");
+    } catch (e) {
+      return false;
+    }
+  });
+
+  // Settings state
+  const [minimaFilterEnabled, setMinimaFilterEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("minimaFilterEnabled") || "true");
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const [metarFilterEnabled, setMetarFilterEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("metarFilterEnabled") || "false");
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const [borderColoringEnabled, setBorderColoringEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("borderColoringEnabled") || "true");
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const [colorScheme, setColorScheme] = useState(() => {
+    try {
+      return localStorage.getItem("colorScheme") || "classic";
+    } catch (e) {
+      return "classic";
+    }
+  });
+
+  // Keyword highlighting state
+  const [keywordHighlightEnabled, setKeywordHighlightEnabled] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("keywordHighlightEnabled") || "false");
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const [keywordCategories, setKeywordCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem("keywordCategories");
+      return saved ? JSON.parse(saved) : DEFAULT_KEYWORDS;
+    } catch (e) {
+      return DEFAULT_KEYWORDS;
+    }
+  });
+
+  const [keywordHighlightModalOpen, setKeywordHighlightModalOpen] = useState(false);
+
+  // ICAO Filter state
+  const [icaoFilter, setIcaoFilter] = useState("");
+  const [showFilteredOnly, setShowFilteredOnly] = useState(false);
+
+  // Drag state
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragInsertPosition, setDragInsertPosition] = useState(null);
+  
+  const icaoInputRef = useRef(null);
+  const filterInputRef = useRef(null);
+
+  // Persist state to localStorage
+  useEffect(() => {
+    localStorage.setItem("globalWeatherMinima", JSON.stringify(globalWeatherMinima));
+  }, [globalWeatherMinima]);
+
+  useEffect(() => {
+    localStorage.setItem("weatherMinima", JSON.stringify(weatherMinima));
+  }, [weatherMinima]);
+
+  useEffect(() => {
+    localStorage.setItem("weatherICAOs", JSON.stringify(weatherICAOs));
+  }, [weatherICAOs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("globalWeatherMinimized", JSON.stringify(globalWeatherMinimized));
+    } catch (e) {}
+  }, [globalWeatherMinimized]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("minimaFilterEnabled", JSON.stringify(minimaFilterEnabled));
+    } catch (e) {}
+  }, [minimaFilterEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("metarFilterEnabled", JSON.stringify(metarFilterEnabled));
+    } catch (e) {}
+  }, [metarFilterEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("borderColoringEnabled", JSON.stringify(borderColoringEnabled));
+    } catch (e) {}
+  }, [borderColoringEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("colorScheme", colorScheme);
+    } catch (e) {}
+  }, [colorScheme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("keywordHighlightEnabled", JSON.stringify(keywordHighlightEnabled));
+    } catch (e) {}
+  }, [keywordHighlightEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("keywordCategories", JSON.stringify(keywordCategories));
+    } catch (e) {}
+  }, [keywordCategories]);
+
+  // Handler functions
+  const handleSetWeatherMinima = (icao, field, value) => {
+    setWeatherMinima(prev => ({
+      ...prev,
+      [icao]: {
+        ...(prev[icao] || globalWeatherMinima),
+        [field]: parseFloat(value)
+      }
+    }));
+  };
+
+  const handleResetWeatherMinima = (icao) => {
+    setWeatherMinima(prev => {
+      const newMinima = { ...prev };
+      delete newMinima[icao];
+      return newMinima;
+    });
+  };
+
+  const handleApplyGlobalWeatherMinima = () => {
+    const newGlobalMinima = {
+      ceiling: parseFloat(globalWeatherCeiling),
+      vis: parseFloat(globalWeatherVis)
+    };
+    setGlobalWeatherMinima(newGlobalMinima);
+    setWeatherMinima({});
+  };
+
+  const handleAddWeatherICAO = () => {
+    if (!icaoInputRef.current) return;
+    
+    const inputValue = icaoInputRef.current.value.toUpperCase();
+    const icaos = inputValue
+      .split(/[,\s]+/)
+      .map(s => s.trim())
+      .filter(s => s.length === 4 && /^[A-Z0-9]{4}$/.test(s));
+
+    let added = false;
+    const newIcaos = [...weatherICAOs];
+    
+    icaos.forEach(icao => {
+      if (icao && !newIcaos.includes(icao)) {
+        newIcaos.push(icao);
+        added = true;
+      }
+    });
+    
+    if (added) {
+      setWeatherICAOs(newIcaos);
+    }
+    
+    icaoInputRef.current.value = "";
+    icaoInputRef.current.focus();
+  };
+
+  const handleRemoveWeatherICAO = (icao) => {
+    setWeatherICAOs(prev => prev.filter(i => i !== icao));
+  };
+
+  const handleIcaoInputKeyPress = (e) => {
+    if (e.key === "Enter") handleAddWeatherICAO();
+  };
+
+  const toggleGlobalWeatherMinimize = () => {
+    setGlobalWeatherMinimized(prev => !prev);
+  };
+
+  // Filter functions
+  const getFilteredICAOs = () => {
+    if (!showFilteredOnly || !icaoFilter.trim()) {
+      return weatherICAOs;
+    }
+
+    const filterICAOs = icaoFilter
+      .toUpperCase()
+      .split(/[,\s]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (filterICAOs.length === 0) {
+      return weatherICAOs;
+    }
+
+    return weatherICAOs.filter(icao => 
+      filterICAOs.some(filterIcao => 
+        icao.includes(filterIcao) || filterIcao.includes(icao)
+      )
+    );
+  };
+
+  const handleToggleFilter = () => {
+    setShowFilteredOnly(prev => !prev);
+    if (!showFilteredOnly) {
+      setTimeout(() => filterInputRef.current?.focus(), 100);
+    }
+  };
+
+  const handleClearFilter = () => {
+    setIcaoFilter("");
+    setShowFilteredOnly(false);
+  };
+
+  const filteredICAOs = getFilteredICAOs();
+
+  // Drag and drop handlers
+  const handleDragStart = (icao) => {
+    setDraggedItem(icao);
+    setDragInsertPosition(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragInsertPosition(null);
+  };
+
+  const handleReorder = (draggedIcao, targetIcao, insertAfter = false) => {
+    if (draggedIcao === targetIcao) return;
+    
+    const newInsertPosition = { targetIcao, insertAfter };
+    
+    if (!dragInsertPosition || 
+        dragInsertPosition.targetIcao !== newInsertPosition.targetIcao || 
+        dragInsertPosition.insertAfter !== newInsertPosition.insertAfter) {
+      setDragInsertPosition(newInsertPosition);
+      
+      setWeatherICAOs(prev => {
+        const newOrder = prev.filter(icao => icao !== draggedIcao);
+        const targetIndex = newOrder.indexOf(targetIcao);
+        
+        if (targetIndex === -1) return prev;
+        
+        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        newOrder.splice(insertIndex, 0, draggedIcao);
+        
+        return newOrder;
+      });
+    }
+  };
+
+  const shouldShowInsertionSpace = (icao, position) => {
+    if (!dragInsertPosition || !draggedItem || icao === draggedItem) return false;
+    
+    if (position === 'before') {
+      return dragInsertPosition.targetIcao === icao && !dragInsertPosition.insertAfter;
+    } else if (position === 'after') {
+      return dragInsertPosition.targetIcao === icao && dragInsertPosition.insertAfter;
+    }
+    
+    return false;
+  };
+
+  const handleCycleColorScheme = () => {
+    const schemes = Object.keys(COLOR_PRESETS);
+    const currentIndex = schemes.indexOf(colorScheme);
+    const nextIndex = (currentIndex + 1) % schemes.length;
+    setColorScheme(schemes[nextIndex]);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-200">
+      <Header />
+      
+      {/* Global Weather Minima Controls */}
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 mb-4">
+        <div className="flex flex-col md:flex-row flex-wrap gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
+          <div className="flex flex-wrap gap-4 items-center justify-center">
+            <span className="font-bold text-cyan-300 text-sm sm:text-base">Default Minima:</span>
+            <label className="text-gray-300 text-sm flex items-center gap-2">
+              Ceil (ft):
+              <input 
+                type="number" 
+                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
+                value={globalWeatherCeiling}
+                onChange={(e) => setGlobalWeatherCeiling(e.target.value)}
+              />
+            </label>
+            <label className="text-gray-300 text-sm flex items-center gap-2">
+              Vis (SM):
+              <input 
+                type="number" 
+                step="0.1" 
+                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
+                value={globalWeatherVis}
+                onChange={(e) => setGlobalWeatherVis(e.target.value)}
+              />
+            </label>
+            <button 
+              onClick={handleApplyGlobalWeatherMinima} 
+              className="bg-green-600 px-4 py-2 rounded text-white hover:bg-green-700 transition-colors text-sm"
+            >
+              Apply Default
+            </button>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 sm:gap-4 items-center justify-center">
+            {/* Keywords Button */}
+            <button
+              onClick={() => setKeywordHighlightModalOpen(true)}
+              className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2 text-sm"
+              title="Keyword Highlighting"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="M21 21l-4.35-4.35"></path>
+              </svg>
+              <span className="hidden sm:inline">Keywords</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Interactive status indicators */}
+        <div className="flex flex-wrap justify-center gap-2 text-xs bg-gray-800 rounded-lg p-3 mb-2">
+          <button 
+            onClick={() => setMinimaFilterEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle TAF color coding"
+          >
+            <span className="text-gray-400 font-medium pl-2">TAF Filter:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {minimaFilterEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+          <button 
+            onClick={() => setMetarFilterEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle METAR color coding"
+          >
+            <span className="text-gray-400 font-medium pl-2">METAR Filter:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              metarFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {metarFilterEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+          <button 
+            onClick={() => setKeywordHighlightEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle keyword highlighting"
+          >
+            <span className="text-gray-400 font-medium pl-2">Keywords:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              keywordHighlightEnabled ? 'bg-yellow-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {keywordHighlightEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+          <button 
+            onClick={() => setBorderColoringEnabled(prev => !prev)}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Toggle tile border coloring"
+          >
+            <span className="text-gray-400 font-medium pl-2">Borders:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              borderColoringEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
+            }`}>
+              {borderColoringEnabled ? 'ON' : 'OFF'}
+            </span>
+          </button>
+          <button 
+            onClick={handleCycleColorScheme}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Cycle color schemes"
+          >
+            <span className="text-gray-400 font-medium pl-2">Colors:</span>
+            <span className="px-2.5 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs">
+              {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
+            </span>
+          </button>
+        </div>
+      </div>
+      
+      {/* ICAO Input and Controls */}
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 mb-6">
+        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
+          <input 
+            ref={icaoInputRef}
+            placeholder="Enter ICAOs (e.g. CYYT,EGLL,KJFK)" 
+            className="bg-gray-700 p-2 rounded text-center w-full sm:w-72 text-white placeholder-gray-400 text-sm"
+            onKeyPress={handleIcaoInputKeyPress}
+          />
+          <div className="flex gap-2 flex-wrap">
+            <button 
+              onClick={handleAddWeatherICAO} 
+              className="bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700 transition-colors text-sm"
+            >
+              Add ICAO(s)
+            </button>
+
+            <button
+              onClick={toggleGlobalWeatherMinimize}
+              className={`px-4 py-2 rounded text-white transition-colors text-sm ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+              title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
+            >
+              {globalWeatherMinimized ? 'Expand All' : 'Minimize All'}
+            </button>
+          </div>
+        </div>
+
+        {/* ICAO Filter Controls */}
+        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-2 items-center bg-gray-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-cyan-300 font-semibold text-sm">
+              🔍 Filter: 
+            </span>
+            <input 
+              ref={filterInputRef}
+              value={icaoFilter}
+              onChange={(e) => setIcaoFilter(e.target.value)}
+              placeholder="Filter ICAOs (e.g. CY, JFK, EGLL)" 
+              className="bg-gray-800 p-2 rounded text-center w-full sm:w-64 text-white placeholder-gray-400 border border-gray-600 focus:border-cyan-400 focus:outline-none transition-colors text-sm"
+            />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button 
+              onClick={handleToggleFilter} 
+              className={`px-4 py-2 rounded text-white transition-colors font-medium text-sm ${showFilteredOnly ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 hover:bg-gray-500'}`}
+              title={showFilteredOnly ? 'Show all stations' : 'Apply filter'}
+            >
+              {showFilteredOnly ? 'Filter Active' : 'Apply Filter'}
+            </button>
+            {(icaoFilter || showFilteredOnly) && (
+              <button 
+                onClick={handleClearFilter} 
+                className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-white transition-colors text-sm"
+                title="Clear filter and show all"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="text-sm text-gray-400 text-center sm:text-left">
+            Showing {filteredICAOs.length} of {weatherICAOs.length} stations
+          </div>
+        </div>
+      </div>
+      
+      {/* Weather Tiles Grid */}
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 pb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+          {filteredICAOs.map((icao) => (
+            <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
+              {shouldShowInsertionSpace(icao, 'before') && (
+                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+              )}
+              
+              {draggedItem && icao !== draggedItem && (
+                <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/30 bg-cyan-400/5 opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+              )}
+              
+              <WeatherTile 
+                icao={icao}
+                weatherMinima={weatherMinima}
+                globalWeatherMinima={globalWeatherMinima}
+                setWeatherMinima={handleSetWeatherMinima}
+                resetWeatherMinima={handleResetWeatherMinima}
+                removeWeatherICAO={handleRemoveWeatherICAO}
+                globalMinimized={globalWeatherMinimized}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onReorder={handleReorder}
+                draggedItem={draggedItem}
+                minimaFilterEnabled={minimaFilterEnabled}
+                colorScheme={colorScheme}
+                borderColoringEnabled={borderColoringEnabled}
+                metarFilterEnabled={metarFilterEnabled}
+                keywordCategories={keywordCategories}
+                keywordHighlightEnabled={keywordHighlightEnabled}
+              />
+              
+              {shouldShowInsertionSpace(icao, 'after') && (
+                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
+              )}
+            </div>
+          ))}
+        </div>
+        
+        {/* Empty states */}
+        {filteredICAOs.length === 0 && weatherICAOs.length > 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-lg mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+              </svg>
+              No stations match your filter
+            </div>
+            <p className="text-gray-500 mb-4">
+              Filter: "<span className="text-cyan-400">{icaoFilter}</span>" matches 0 of {weatherICAOs.length} stations
+            </p>
+            <button 
+              onClick={handleClearFilter}
+              className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded text-white transition-colors"
+            >
+              Clear Filter
+            </button>
+          </div>
+        ) : filteredICAOs.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-lg mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+              </svg>
+              No weather stations added yet
+            </div>
+            <p className="text-gray-500">
+              Add ICAO codes above to start monitoring weather conditions
+            </p>
+            <p className="text-gray-400 mt-2 text-sm">
+              Use the status pills and Keywords button to configure your view
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Keyword Highlight Manager Modal */}
+      <KeywordHighlightManager
+        isOpen={keywordHighlightModalOpen}
+        onClose={() => setKeywordHighlightModalOpen(false)}
+        keywordCategories={keywordCategories}
+        setKeywordCategories={setKeywordCategories}
+        keywordHighlightEnabled={keywordHighlightEnabled}
+        setKeywordHighlightEnabled={setKeywordHighlightEnabled}
+        defaultKeywords={DEFAULT_KEYWORDS}
+      />
+    </div>
+  );
+};
+
+
+// --- Child Components ---
 
 // Weather utilities
 const TAF_CACHE_MS = 600000; // 10 minutes
@@ -707,7 +1308,7 @@ const WeatherTile = ({
         </div>
 
 
-                {/* Minima and NOTAM controls */}
+        {/* Minima and NOTAM controls */}
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-2">
             <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
@@ -827,578 +1428,4 @@ const WeatherTile = ({
   );
 };
 
-// Main App Component
-const WeatherMonitorApp = () => {
-  // State variables
-  const [globalWeatherMinima, setGlobalWeatherMinima] = useState(
-    JSON.parse(localStorage.getItem("globalWeatherMinima") || '{"ceiling":500,"vis":1}')
-  );
-  
-  const [weatherMinima, setWeatherMinima] = useState(
-    JSON.parse(localStorage.getItem("weatherMinima") || "{}")
-  );
-  
-  const [weatherICAOs, setWeatherICAOs] = useState(
-    JSON.parse(localStorage.getItem("weatherICAOs") || "[]")
-  );
-  
-  const [globalWeatherCeiling, setGlobalWeatherCeiling] = useState(globalWeatherMinima.ceiling);
-  const [globalWeatherVis, setGlobalWeatherVis] = useState(globalWeatherMinima.vis);
-  
-  const [globalWeatherMinimized, setGlobalWeatherMinimized] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("globalWeatherMinimized") || "false");
-    } catch (e) {
-      return false;
-    }
-  });
-
-  // Settings state
-  const [minimaFilterEnabled, setMinimaFilterEnabled] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("minimaFilterEnabled") || "true");
-    } catch (e) {
-      return true;
-    }
-  });
-
-  const [metarFilterEnabled, setMetarFilterEnabled] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("metarFilterEnabled") || "false");
-    } catch (e) {
-      return false;
-    }
-  });
-
-  const [borderColoringEnabled, setBorderColoringEnabled] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("borderColoringEnabled") || "true");
-    } catch (e) {
-      return true;
-    }
-  });
-
-  const [colorScheme, setColorScheme] = useState(() => {
-    try {
-      return localStorage.getItem("colorScheme") || "classic";
-    } catch (e) {
-      return "classic";
-    }
-  });
-
-  // Keyword highlighting state
-  const [keywordHighlightEnabled, setKeywordHighlightEnabled] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("keywordHighlightEnabled") || "false");
-    } catch (e) {
-      return false;
-    }
-  });
-
-  const [keywordCategories, setKeywordCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem("keywordCategories");
-      return saved ? JSON.parse(saved) : DEFAULT_KEYWORDS;
-    } catch (e) {
-      return DEFAULT_KEYWORDS;
-    }
-  });
-
-  const [keywordHighlightModalOpen, setKeywordHighlightModalOpen] = useState(false);
-
-  // ICAO Filter state
-  const [icaoFilter, setIcaoFilter] = useState("");
-  const [showFilteredOnly, setShowFilteredOnly] = useState(false);
-
-  // Drag state
-  const [draggedItem, setDraggedItem] = useState(null);
-  const [dragInsertPosition, setDragInsertPosition] = useState(null);
-  
-  const icaoInputRef = useRef(null);
-  const filterInputRef = useRef(null);
-
-  // Persist state to localStorage
-  useEffect(() => {
-    localStorage.setItem("globalWeatherMinima", JSON.stringify(globalWeatherMinima));
-  }, [globalWeatherMinima]);
-
-  useEffect(() => {
-    localStorage.setItem("weatherMinima", JSON.stringify(weatherMinima));
-  }, [weatherMinima]);
-
-  useEffect(() => {
-    localStorage.setItem("weatherICAOs", JSON.stringify(weatherICAOs));
-  }, [weatherICAOs]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("globalWeatherMinimized", JSON.stringify(globalWeatherMinimized));
-    } catch (e) {}
-  }, [globalWeatherMinimized]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("minimaFilterEnabled", JSON.stringify(minimaFilterEnabled));
-    } catch (e) {}
-  }, [minimaFilterEnabled]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("metarFilterEnabled", JSON.stringify(metarFilterEnabled));
-    } catch (e) {}
-  }, [metarFilterEnabled]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("borderColoringEnabled", JSON.stringify(borderColoringEnabled));
-    } catch (e) {}
-  }, [borderColoringEnabled]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("colorScheme", colorScheme);
-    } catch (e) {}
-  }, [colorScheme]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("keywordHighlightEnabled", JSON.stringify(keywordHighlightEnabled));
-    } catch (e) {}
-  }, [keywordHighlightEnabled]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("keywordCategories", JSON.stringify(keywordCategories));
-    } catch (e) {}
-  }, [keywordCategories]);
-
-  // Handler functions
-  const handleSetWeatherMinima = (icao, field, value) => {
-    setWeatherMinima(prev => ({
-      ...prev,
-      [icao]: {
-        ...(prev[icao] || globalWeatherMinima),
-        [field]: parseFloat(value)
-      }
-    }));
-  };
-
-  const handleResetWeatherMinima = (icao) => {
-    setWeatherMinima(prev => {
-      const newMinima = { ...prev };
-      delete newMinima[icao];
-      return newMinima;
-    });
-  };
-
-  const handleApplyGlobalWeatherMinima = () => {
-    const newGlobalMinima = {
-      ceiling: parseFloat(globalWeatherCeiling),
-      vis: parseFloat(globalWeatherVis)
-    };
-    setGlobalWeatherMinima(newGlobalMinima);
-    setWeatherMinima({});
-  };
-
-  const handleAddWeatherICAO = () => {
-    if (!icaoInputRef.current) return;
-    
-    const inputValue = icaoInputRef.current.value.toUpperCase();
-    const icaos = inputValue
-      .split(/[,\s]+/)
-      .map(s => s.trim())
-      .filter(s => s.length === 4 && /^[A-Z0-9]{4}$/.test(s));
-
-    let added = false;
-    const newIcaos = [...weatherICAOs];
-    
-    icaos.forEach(icao => {
-      if (icao && !newIcaos.includes(icao)) {
-        newIcaos.push(icao);
-        added = true;
-      }
-    });
-    
-    if (added) {
-      setWeatherICAOs(newIcaos);
-    }
-    
-    icaoInputRef.current.value = "";
-    icaoInputRef.current.focus();
-  };
-
-  const handleRemoveWeatherICAO = (icao) => {
-    setWeatherICAOs(prev => prev.filter(i => i !== icao));
-  };
-
-  const handleIcaoInputKeyPress = (e) => {
-    if (e.key === "Enter") handleAddWeatherICAO();
-  };
-
-  const toggleGlobalWeatherMinimize = () => {
-    setGlobalWeatherMinimized(prev => !prev);
-  };
-
-  // Filter functions
-  const getFilteredICAOs = () => {
-    if (!showFilteredOnly || !icaoFilter.trim()) {
-      return weatherICAOs;
-    }
-
-    const filterICAOs = icaoFilter
-      .toUpperCase()
-      .split(/[,\s]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    if (filterICAOs.length === 0) {
-      return weatherICAOs;
-    }
-
-    return weatherICAOs.filter(icao => 
-      filterICAOs.some(filterIcao => 
-        icao.includes(filterIcao) || filterIcao.includes(icao)
-      )
-    );
-  };
-
-  const handleToggleFilter = () => {
-    setShowFilteredOnly(prev => !prev);
-    if (!showFilteredOnly) {
-      setTimeout(() => filterInputRef.current?.focus(), 100);
-    }
-  };
-
-  const handleClearFilter = () => {
-    setIcaoFilter("");
-    setShowFilteredOnly(false);
-  };
-
-  const filteredICAOs = getFilteredICAOs();
-
-  // Drag and drop handlers
-  const handleDragStart = (icao) => {
-    setDraggedItem(icao);
-    setDragInsertPosition(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedItem(null);
-    setDragInsertPosition(null);
-  };
-
-  const handleReorder = (draggedIcao, targetIcao, insertAfter = false) => {
-    if (draggedIcao === targetIcao) return;
-    
-    const newInsertPosition = { targetIcao, insertAfter };
-    
-    if (!dragInsertPosition || 
-        dragInsertPosition.targetIcao !== newInsertPosition.targetIcao || 
-        dragInsertPosition.insertAfter !== newInsertPosition.insertAfter) {
-      setDragInsertPosition(newInsertPosition);
-      
-      setWeatherICAOs(prev => {
-        const newOrder = prev.filter(icao => icao !== draggedIcao);
-        const targetIndex = newOrder.indexOf(targetIcao);
-        
-        if (targetIndex === -1) return prev;
-        
-        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
-        newOrder.splice(insertIndex, 0, draggedIcao);
-        
-        return newOrder;
-      });
-    }
-  };
-
-  const shouldShowInsertionSpace = (icao, position) => {
-    if (!dragInsertPosition || !draggedItem || icao === draggedItem) return false;
-    
-    if (position === 'before') {
-      return dragInsertPosition.targetIcao === icao && !dragInsertPosition.insertAfter;
-    } else if (position === 'after') {
-      return dragInsertPosition.targetIcao === icao && dragInsertPosition.insertAfter;
-    }
-    
-    return false;
-  };
-
-  const handleCycleColorScheme = () => {
-    const schemes = Object.keys(COLOR_PRESETS);
-    const currentIndex = schemes.indexOf(colorScheme);
-    const nextIndex = (currentIndex + 1) % schemes.length;
-    setColorScheme(schemes[nextIndex]);
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-900 text-gray-200">
-      <Header />
-      
-      {/* Global Weather Minima Controls */}
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 mb-4">
-        <div className="flex flex-col md:flex-row flex-wrap gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
-          <div className="flex flex-wrap gap-4 items-center justify-center">
-            <span className="font-bold text-cyan-300 text-sm sm:text-base">Default Minima:</span>
-            <label className="text-gray-300 text-sm flex items-center gap-2">
-              Ceil (ft):
-              <input 
-                type="number" 
-                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
-                value={globalWeatherCeiling}
-                onChange={(e) => setGlobalWeatherCeiling(e.target.value)}
-              />
-            </label>
-            <label className="text-gray-300 text-sm flex items-center gap-2">
-              Vis (SM):
-              <input 
-                type="number" 
-                step="0.1" 
-                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
-                value={globalWeatherVis}
-                onChange={(e) => setGlobalWeatherVis(e.target.value)}
-              />
-            </label>
-            <button 
-              onClick={handleApplyGlobalWeatherMinima} 
-              className="bg-green-600 px-4 py-2 rounded text-white hover:bg-green-700 transition-colors text-sm"
-            >
-              Apply Default
-            </button>
-          </div>
-          
-          <div className="flex flex-wrap gap-2 sm:gap-4 items-center justify-center">
-            {/* Keywords Button */}
-            <button
-              onClick={() => setKeywordHighlightModalOpen(true)}
-              className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2 text-sm"
-              title="Keyword Highlighting"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="M21 21l-4.35-4.35"></path>
-              </svg>
-              <span className="hidden sm:inline">Keywords</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Interactive status indicators */}
-        <div className="flex flex-wrap justify-center gap-2 text-xs bg-gray-800 rounded-lg p-3 mb-2">
-          <button 
-            onClick={() => setMinimaFilterEnabled(prev => !prev)}
-            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
-            title="Toggle TAF color coding"
-          >
-            <span className="text-gray-400 font-medium pl-2">TAF Filter:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              minimaFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {minimaFilterEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-          <button 
-            onClick={() => setMetarFilterEnabled(prev => !prev)}
-            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
-            title="Toggle METAR color coding"
-          >
-            <span className="text-gray-400 font-medium pl-2">METAR Filter:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              metarFilterEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {metarFilterEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-          <button 
-            onClick={() => setKeywordHighlightEnabled(prev => !prev)}
-            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
-            title="Toggle keyword highlighting"
-          >
-            <span className="text-gray-400 font-medium pl-2">Keywords:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              keywordHighlightEnabled ? 'bg-yellow-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {keywordHighlightEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-          <button 
-            onClick={() => setBorderColoringEnabled(prev => !prev)}
-            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
-            title="Toggle tile border coloring"
-          >
-            <span className="text-gray-400 font-medium pl-2">Borders:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              borderColoringEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'
-            }`}>
-              {borderColoringEnabled ? 'ON' : 'OFF'}
-            </span>
-          </button>
-          <button 
-            onClick={handleCycleColorScheme}
-            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
-            title="Cycle color schemes"
-          >
-            <span className="text-gray-400 font-medium pl-2">Colors:</span>
-            <span className="px-2.5 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs">
-              {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
-            </span>
-          </button>
-        </div>
-      </div>
-      
-      {/* ICAO Input and Controls */}
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 mb-6">
-        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-2 mb-4 items-center bg-gray-800 rounded-lg p-4">
-          <input 
-            ref={icaoInputRef}
-            placeholder="Enter ICAOs (e.g. CYYT,EGLL,KJFK)" 
-            className="bg-gray-700 p-2 rounded text-center w-full sm:w-72 text-white placeholder-gray-400 text-sm"
-            onKeyPress={handleIcaoInputKeyPress}
-          />
-          <div className="flex gap-2 flex-wrap">
-            <button 
-              onClick={handleAddWeatherICAO} 
-              className="bg-blue-600 px-4 py-2 rounded text-white hover:bg-blue-700 transition-colors text-sm"
-            >
-              Add ICAO(s)
-            </button>
-
-            <button
-              onClick={toggleGlobalWeatherMinimize}
-              className={`px-4 py-2 rounded text-white transition-colors text-sm ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-              title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
-            >
-              {globalWeatherMinimized ? 'Expand All' : 'Minimize All'}
-            </button>
-          </div>
-        </div>
-
-        {/* ICAO Filter Controls */}
-        <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-2 items-center bg-gray-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-cyan-300 font-semibold text-sm">
-              🔍 Filter: 
-            </span>
-            <input 
-              ref={filterInputRef}
-              value={icaoFilter}
-              onChange={(e) => setIcaoFilter(e.target.value)}
-              placeholder="Filter ICAOs (e.g. CY, JFK, EGLL)" 
-              className="bg-gray-800 p-2 rounded text-center w-full sm:w-64 text-white placeholder-gray-400 border border-gray-600 focus:border-cyan-400 focus:outline-none transition-colors text-sm"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button 
-              onClick={handleToggleFilter} 
-              className={`px-4 py-2 rounded text-white transition-colors font-medium text-sm ${showFilteredOnly ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-gray-600 hover:bg-gray-500'}`}
-              title={showFilteredOnly ? 'Show all stations' : 'Apply filter'}
-            >
-              {showFilteredOnly ? 'Filter Active' : 'Apply Filter'}
-            </button>
-            {(icaoFilter || showFilteredOnly) && (
-              <button 
-                onClick={handleClearFilter} 
-                className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-white transition-colors text-sm"
-                title="Clear filter and show all"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="text-sm text-gray-400 text-center sm:text-left">
-            Showing {filteredICAOs.length} of {weatherICAOs.length} stations
-          </div>
-        </div>
-      </div>
-      
-      {/* Weather Tiles Grid */}
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-          {filteredICAOs.map((icao) => (
-            <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
-              {shouldShowInsertionSpace(icao, 'before') && (
-                <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
-              )}
-              
-              {draggedItem && icao !== draggedItem && (
-                <div className="absolute inset-0 rounded-xl border-2 border-dashed border-cyan-400/30 bg-cyan-400/5 opacity-0 hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
-              )}
-              
-              <WeatherTile 
-                icao={icao}
-                weatherMinima={weatherMinima}
-                globalWeatherMinima={globalWeatherMinima}
-                setWeatherMinima={handleSetWeatherMinima}
-                resetWeatherMinima={handleResetWeatherMinima}
-                removeWeatherICAO={handleRemoveWeatherICAO}
-                globalMinimized={globalWeatherMinimized}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onReorder={handleReorder}
-                draggedItem={draggedItem}
-                minimaFilterEnabled={minimaFilterEnabled}
-                colorScheme={colorScheme}
-                borderColoringEnabled={borderColoringEnabled}
-                metarFilterEnabled={metarFilterEnabled}
-                keywordCategories={keywordCategories}
-                keywordHighlightEnabled={keywordHighlightEnabled}
-              />
-              
-              {shouldShowInsertionSpace(icao, 'after') && (
-                <div className="absolute -right-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
-              )}
-            </div>
-          ))}
-        </div>
-        
-        {/* Empty states */}
-        {filteredICAOs.length === 0 && weatherICAOs.length > 0 ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-lg mb-4">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
-              </svg>
-              No stations match your filter
-            </div>
-            <p className="text-gray-500 mb-4">
-              Filter: "<span className="text-cyan-400">{icaoFilter}</span>" matches 0 of {weatherICAOs.length} stations
-            </p>
-            <button 
-              onClick={handleClearFilter}
-              className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded text-white transition-colors"
-            >
-              Clear Filter
-            </button>
-          </div>
-        ) : filteredICAOs.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-lg mb-4">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
-              </svg>
-              No weather stations added yet
-            </div>
-            <p className="text-gray-500">
-              Add ICAO codes above to start monitoring weather conditions
-            </p>
-            <p className="text-gray-400 mt-2 text-sm">
-              Use the status pills and Keywords button to configure your view
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Keyword Highlight Manager Modal */}
-      <KeywordHighlightManager
-        isOpen={keywordHighlightModalOpen}
-        onClose={() => setKeywordHighlightModalOpen(false)}
-        keywordCategories={keywordCategories}
-        setKeywordCategories={setKeywordCategories}
-        keywordHighlightEnabled={keywordHighlightEnabled}
-        setKeywordHighlightEnabled={setKeywordHighlightEnabled}
-        defaultKeywords={DEFAULT_KEYWORDS}
-      />
-    </div>
-  );
-};
-
-export default WeatherMonitorApp;
+export default App;
