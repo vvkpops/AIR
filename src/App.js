@@ -687,15 +687,6 @@ const WeatherTile = ({
           
           {/* Header Buttons */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleNotamClick}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              className="bg-orange-600 hover:bg-orange-700 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-orange-400 hover:scale-110 transition-all duration-200"
-              title={`View NOTAMs for ${icao}`}
-            >
-              <span className="font-bold text-sm">N</span>
-            </button>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -716,49 +707,60 @@ const WeatherTile = ({
         </div>
 
 
-        {/* Minima controls */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
-          <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
-            Ceil: 
-            <input 
-              type="number" 
-              value={min.ceiling}
-              className="bg-gray-700 p-1 rounded w-16 sm:w-20 text-center text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none text-xs"
-              onChange={(e) => setWeatherMinima(icao, 'ceiling', e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              aria-label={`${icao} ceiling minima`}
-            />
-          </label>
-          <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
-            Vis: 
-            <input 
-              type="number" 
-              step="0.1" 
-              value={min.vis}
-              className="bg-gray-700 p-1 rounded w-16 sm:w-20 text-center text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none text-xs"
-              onChange={(e) => setWeatherMinima(icao, 'vis', e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              aria-label={`${icao} visibility minima`}
-            />
-          </label>
-          {!usingDefault && (
-            <button 
-              className="text-yellow-400 underline text-xs hover:text-yellow-200 whitespace-nowrap" 
-              onClick={(e) => {
-                e.stopPropagation();
-                resetWeatherMinima(icao);
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              aria-label={`Reset ${icao} minima`}
-            >
-              reset
-            </button>
-          )}
+        {/* Minima and NOTAM controls */}
+        <div className="flex flex-wrap gap-x-4 gap-y-2 items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2">
+            <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
+              Ceil: 
+              <input 
+                type="number" 
+                value={min.ceiling}
+                className="bg-gray-700 p-1 rounded w-16 sm:w-20 text-center text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none text-xs"
+                onChange={(e) => setWeatherMinima(icao, 'ceiling', e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                aria-label={`${icao} ceiling minima`}
+              />
+            </label>
+            <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
+              Vis: 
+              <input 
+                type="number" 
+                step="0.1" 
+                value={min.vis}
+                className="bg-gray-700 p-1 rounded w-16 sm:w-20 text-center text-white focus:ring-2 focus:ring-cyan-400 focus:outline-none text-xs"
+                onChange={(e) => setWeatherMinima(icao, 'vis', e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                aria-label={`${icao} visibility minima`}
+              />
+            </label>
+            {!usingDefault && (
+              <button 
+                className="text-yellow-400 underline text-xs hover:text-yellow-200 whitespace-nowrap" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetWeatherMinima(icao);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                aria-label={`Reset ${icao} minima`}
+              >
+                reset
+              </button>
+            )}
+          </div>
+          <button
+            onClick={handleNotamClick}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-gray-600 shadow-sm"
+            title={`View NOTAMs for ${icao}`}
+          >
+            NOTAMs
+          </button>
         </div>
 
         {/* Weather content */}
