@@ -83,6 +83,13 @@ code {
   padding: 16px !important;
 }
 
+/* New class for a more transparent, interactive backdrop */
+.modal-backdrop-interactive {
+  background-color: rgba(17, 24, 39, 0.4) !important; /* gray-900 with 40% opacity */
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+}
+
 /* Ensure modal content doesn't move and is properly sized */
 .modal-content-fixed {
   position: relative !important;
