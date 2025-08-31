@@ -2,40 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 
-// Default keyword categories with common aviation weather terms
-const DEFAULT_KEYWORDS = {
-  warnings: {
-    name: 'Warnings',
-    color: 'bg-red-500',
-    textColor: 'text-white',
-    keywords: ['TSGR', 'TSRA', 'SQ', 'FC', 'DS', 'SS', 'FZRA', 'FZDZ', 'BLSN', 'DRSN', '+SN', '+RA', '+TSRA', 'SH', 'TCU', 'CB']
-  },
-  visibility: {
-    name: 'Visibility',
-    color: 'bg-orange-500',
-    textColor: 'text-white',
-    keywords: ['BR', 'FG', 'FU', 'VA', 'DU', 'SA', 'HZ', 'PY', '1/4SM', '1/2SM', '3/4SM', '1SM', '2SM']
-  },
-  wind: {
-    name: 'Wind',
-    color: 'bg-blue-500',
-    textColor: 'text-white',
-    keywords: ['G', 'VRB', 'KT', 'MPS', '35KT', '40KT', '45KT', '50KT']
-  },
-  clouds: {
-    name: 'Clouds',
-    color: 'bg-purple-500',
-    textColor: 'text-white',
-    keywords: ['FEW', 'SCT', 'BKN', 'OVC', 'VV', 'CLR', 'SKC', 'NSC', '000', '001', '002', '003', '004', '005']
-  },
-  temperature: {
-    name: 'Temperature',
-    color: 'bg-green-500',
-    textColor: 'text-white',
-    keywords: ['M10', 'M15', 'M20', 'M25', 'M30', '35/', '40/', '45/']
-  }
-};
-
 // Color options for custom categories
 const COLOR_OPTIONS = [
   { name: 'Red', bg: 'bg-red-500', text: 'text-white' },
@@ -57,7 +23,8 @@ const KeywordHighlightManager = ({
   keywordCategories, 
   setKeywordCategories,
   keywordHighlightEnabled,
-  setKeywordHighlightEnabled
+  setKeywordHighlightEnabled,
+  defaultKeywords
 }) => {
   const modalRef = useRef(null);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -151,7 +118,7 @@ const KeywordHighlightManager = ({
   };
 
   const handleResetToDefaults = () => {
-    setKeywordCategories({ ...DEFAULT_KEYWORDS });
+    setKeywordCategories({ ...defaultKeywords });
   };
 
   if (!isOpen) return null;
@@ -381,189 +348,46 @@ const KeywordHighlightManager = ({
 };
 
 // Utility function to highlight text with keywords
-export const highlightKeywords = (text, keywordCategories, enabled = true) => {
-  if (!enabled || !text || typeof text !== 'string') {
+export const highlightKeywords = (text, keywordCategories) => {
+  if (!text || typeof text !== 'string' || !keywordCategories) {
     return text;
   }
 
-  let highlightedText = text;
-  
-  // Get all enabled categories
-  const enabledCategories = Object.entries(keywordCategories)
-    .filter(([_, category]) => category.enabled);
-
-  // Sort categories by keyword length (longest first) to avoid partial matches
-  const allKeywords = [];
-  enabledCategories.forEach(([categoryId, category]) => {
-    category.keywords.forEach(keyword => {
-      allKeywords.push({
+  // Get all enabled categories and their keywords
+  const allKeywords = Object.values(keywordCategories)
+    .filter(category => category.enabled && category.keywords.length > 0)
+    .flatMap(category => 
+      category.keywords.map(keyword => ({
         keyword: keyword.toUpperCase(),
         category: category
-      });
-    });
-  });
-
-  // Sort by keyword length (descending) to match longer keywords first
+      }))
+    );
+  
+  // Sort by keyword length (descending) to match longer keywords first (e.g., "+SN" before "SN")
   allKeywords.sort((a, b) => b.keyword.length - a.keyword.length);
 
-  // Create a map to track which parts of the string have been highlighted
-  const highlightMap = new Array(text.length).fill(false);
-  const highlights = [];
-
-  // Find all keyword matches
-  allKeywords.forEach(({ keyword, category }) => {
-    const upperText = text.toUpperCase();
-    let searchIndex = 0;
-
-    while (true) {
-      const index = upperText.indexOf(keyword, searchIndex);
-      if (index === -1) break;
-
-      // Check if this is a whole word match
-      const beforeChar = index > 0 ? text[index - 1] : ' ';
-      const afterChar = index + keyword.length < text.length ? text[index + keyword.length] : ' ';
-      const isWholeWord = /\W/.test(beforeChar) && /\W/.test(afterChar);
-
-      if (isWholeWord) {
-        // Check if this area is already highlighted
-        const alreadyHighlighted = highlightMap.slice(index, index + keyword.length).some(h => h);
-        
-        if (!alreadyHighlighted) {
-          // Mark this area as highlighted
-          for (let i = index; i < index + keyword.length; i++) {
-            highlightMap[i] = true;
-          }
-
-          highlights.push({
-            start: index,
-            end: index + keyword.length,
-            keyword: keyword,
-            category: category
-          });
-        }
-      }
-
-      searchIndex = index + 1;
-    }
-  });
-
-  // Sort highlights by start position
-  highlights.sort((a, b) => a.start - b.start);
-
-  // Apply highlights
-  if (highlights.length === 0) {
+  if (allKeywords.length === 0) {
     return text;
   }
 
-  let result = '';
-  let lastIndex = 0;
-
-  highlights.forEach(highlight => {
-    // Add text before highlight
-    result += text.slice(lastIndex, highlight.start);
-    
-    // Add highlighted text
-    const highlightedPart = text.slice(highlight.start, highlight.end);
-    result += `<span class="keyword-highlight ${highlight.category.color} ${highlight.category.textColor} px-1 py-0.5 rounded text-xs font-bold" title="Category: ${highlight.category.name}">${highlightedPart}</span>`;
-    
-    lastIndex = highlight.end;
-  });
-
-  // Add remaining text
-  result += text.slice(lastIndex);
-
-  return result;
-};
-
-// Enhanced function to highlight TAF with keyword support
-export const highlightTAFWithKeywords = (raw, minC, minV, filterEnabled, colorScheme, keywordCategories, keywordEnabled) => {
-  const lines = raw.split("\n").map(line => {
-    // First apply existing weather minima highlighting logic
-    const p = parseLine(line); // You'll need to import this from App.js or create a utility file
-    const visOk = p.isGreater ? true : (p.visMiles >= minV);
-    const ceilOk = p.ceiling >= minC;
-    const meetsMinima = visOk && ceilOk;
-    
-    // Apply keyword highlighting to the line
-    let processedLine = keywordEnabled ? highlightKeywords(line, keywordCategories, true) : line;
-    
-    // Apply color scheme if filter is enabled
-    if (filterEnabled) {
-      const colorClass = meetsMinima ? 
-        (COLOR_PRESETS[colorScheme]?.aboveMinima || 'text-green-300') : 
-        (COLOR_PRESETS[colorScheme]?.belowMinima || 'text-red-400');
-      const fontWeight = meetsMinima ? '' : 'font-bold';
-      
-      return `<div class="${colorClass} ${fontWeight}">${processedLine}</div>`;
-    } else {
-      const baseColor = COLOR_PRESETS[colorScheme]?.taf || 'text-green-300';
-      return `<div class="${baseColor}">${processedLine}</div>`;
+  // Create a regex that finds any of the keywords as whole words
+  const regex = new RegExp(`\\b(${allKeywords.map(k => k.keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g');
+  
+  // Create a map for quick lookup of keyword to category
+  const keywordMap = allKeywords.reduce((acc, { keyword, category }) => {
+    if (!acc[keyword]) {
+      acc[keyword] = category;
     }
-  });
-
-  return lines.join("");
-};
-
-// Parse line function (you might need to adjust based on your existing implementation)
-const parseLine = (line) => {
-  let ceiling = Infinity;
-  let visMiles = Infinity;
-  let isGreater = false;
-  let isLess = false;
-
-  if (!line || typeof line !== 'string') {
-    return { ceiling, visMiles, isGreater, isLess };
-  }
-
-  const l = line.replace(/\u00A0/g, ' ').toUpperCase();
-
-  const cloud = l.match(/(BKN|OVC|VV)\s*(\d{3})/);
-  if (cloud) {
-    ceiling = parseInt(cloud[2], 10) * 100;
-  }
-
-  const visRegex = /\b([PM])?\s*((\d{1,2})\s+(\d{1,2}\/\d{1,2})|(\d{1,2}\/\d{1,2})|(\d{1,2}))\s*SM\b/i;
-  const m = l.match(visRegex);
-
-  function parseFractionString(fracStr) {
-    const pieces = fracStr.split('/');
-    const num = parseFloat(pieces[0]);
-    const den = parseFloat(pieces[1]) || 1;
-    if (!isFinite(num) || !isFinite(den) || den === 0) return 0;
-    return num / den;
-  }
-
-  if (m) {
-    const prefix = (m[1] || '').toUpperCase();
-    if (prefix === 'P') isGreater = true;
-    if (prefix === 'M') isLess = true;
-
-    if (m[3] && m[4]) {
-      const whole = parseInt(m[3], 10);
-      const frac = parseFractionString(m[4]);
-      visMiles = whole + frac;
-    } else if (m[5]) {
-      visMiles = parseFractionString(m[5]);
-    } else if (m[6]) {
-      visMiles = parseInt(m[6], 10);
+    return acc;
+  }, {});
+  
+  return text.replace(regex, (match) => {
+    const category = keywordMap[match.toUpperCase()];
+    if (category) {
+      return `<span class="keyword-highlight ${category.color} ${category.textColor}" title="Category: ${category.name}">${match}</span>`;
     }
-  }
-
-  if (!isFinite(visMiles)) visMiles = Infinity;
-
-  return { ceiling, visMiles, isGreater, isLess };
-};
-
-// Placeholder COLOR_PRESETS - you'll need to import this from App.js or create a shared constants file
-const COLOR_PRESETS = {
-  'classic': {
-    name: 'Classic Green/Red',
-    aboveMinima: 'text-green-300',
-    belowMinima: 'text-red-400',
-    metar: 'text-green-300',
-    taf: 'text-green-300'
-  },
-  // ... other presets
+    return match;
+  });
 };
 
 export default KeywordHighlightManager;
