@@ -316,7 +316,7 @@ const SettingsPanel = ({
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(
-    <div className="modal-overlay modal-backdrop-blur modal-animate">
+    <div className="modal-overlay modal-backdrop-interactive modal-animate">
       <div ref={modalRef} className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl">
         <div className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl">
           <h3 className="text-xl font-bold text-cyan-400">Display Settings</h3>
