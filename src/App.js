@@ -81,13 +81,6 @@ const COLOR_PRESETS = {
     metar: 'text-white',
     taf: 'text-white'
   },
-  'custom': {
-    name: 'Custom Colors',
-    aboveMinima: 'text-green-400',
-    belowMinima: 'text-red-400',
-    metar: 'text-green-400',
-    taf: 'text-green-400'
-  }
 };
 
 // Utility functions
@@ -237,300 +230,6 @@ const Header = () => {
     </header>
   );
 };
-// Color Picker Component
-const ColorPicker = ({ label, value, onChange, className = "" }) => {
-  const baseColors = [
-    { name: 'Red', value: 'text-red-400', color: '#f87171' },
-    { name: 'Orange', value: 'text-orange-400', color: '#fb923c' },
-    { name: 'Yellow', value: 'text-yellow-400', color: '#facc15' },
-    { name: 'Green', value: 'text-green-400', color: '#4ade80' },
-    { name: 'Blue', value: 'text-blue-400', color: '#60a5fa' },
-    { name: 'Cyan', value: 'text-cyan-400', color: '#22d3ee' },
-    { name: 'Purple', value: 'text-purple-400', color: '#a78bfa' },
-    { name: 'Pink', value: 'text-pink-400', color: '#f472b6' },
-    { name: 'White', value: 'text-white', color: '#ffffff' },
-    { name: 'Gray', value: 'text-gray-300', color: '#d1d5db' }
-  ];
-
-  return (
-    <div className={`flex flex-col gap-2 ${className}`}>
-      <label className="text-sm font-medium text-gray-300">{label}</label>
-      <div className="flex flex-wrap gap-1">
-        {baseColors.map(color => (
-          <button
-            key={color.value}
-            onClick={() => onChange(color.value)}
-            className={`w-8 h-8 rounded border-2 transition-all duration-200 hover:scale-110 ${
-              value === color.value ? 'border-white shadow-md' : 'border-gray-600'
-            }`}
-            style={{ backgroundColor: color.color }}
-            title={color.name}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Settings Panel Component
-const SettingsPanel = ({ 
-  isOpen, 
-  onClose, 
-  minimaFilterEnabled, 
-  setMinimaFilterEnabled, 
-  colorScheme, 
-  setColorScheme,
-  customColors,
-  setCustomColors,
-  borderColoringEnabled,
-  setBorderColoringEnabled,
-  metarFilterEnabled,
-  setMetarFilterEnabled
-}) => {
-  const modalRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-
-  const handleMouseDown = (e) => {
-    // Only drag from the header
-    if (!e.target.classList.contains('modal-header-fixed') && !e.target.closest('.modal-header-fixed')) {
-      return;
-    }
-    setIsDragging(true);
-    const modalRect = modalRef.current.getBoundingClientRect();
-    setOffset({
-      x: e.clientX - modalRect.left,
-      y: e.clientY - modalRect.top,
-    });
-    // Prevent text selection while dragging
-    e.preventDefault();
-  };
-
-  const handleMouseMove = useCallback((e) => {
-    if (isDragging) {
-      setPosition({
-        x: e.clientX - offset.x,
-        y: e.clientY - offset.y,
-      });
-    }
-  }, [isDragging, offset]);
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, handleMouseMove]);
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Center modal on first open
-      if (modalRef.current) {
-        const { innerWidth, innerHeight } = window;
-        const { offsetWidth, offsetHeight } = modalRef.current;
-        setPosition({ x: (innerWidth - offsetWidth) / 2, y: (innerHeight - offsetHeight) / 2 });
-      }
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  return ReactDOM.createPortal(
-    <div className="modal-overlay modal-animate" style={{ alignItems: 'flex-start', justifyContent: 'flex-start', pointerEvents: isDragging ? 'auto' : 'none' }}>
-      <div 
-        ref={modalRef} 
-        className="modal-content-fixed bg-gray-800 rounded-xl shadow-2xl border border-gray-600 max-w-2xl"
-        style={{ 
-          transform: `translate(${position.x}px, ${position.y}px)`, 
-          pointerEvents: 'auto' 
-        }}
-      >
-        <div 
-          className="modal-header-fixed flex justify-between items-center border-b border-gray-700 p-6 bg-gray-900 rounded-t-xl cursor-grab active:cursor-grabbing"
-          onMouseDown={handleMouseDown}
-        >
-          <h3 className="text-xl font-bold text-cyan-400">Display Settings</h3>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-4xl font-light focus:outline-none hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200"
-          >
-            ×
-          </button>
-        </div>
-        
-        <div className="modal-body-scrollable p-6 space-y-6">
-          {/* Minima Filter Toggle */}
-          <div className="bg-gray-900 rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Weather Minima Filters</h4>
-            
-            {/* TAF Filter */}
-            <div className="flex items-center gap-3 mb-4">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={minimaFilterEnabled}
-                  onChange={(e) => setMinimaFilterEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  minimaFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    minimaFilterEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {minimaFilterEnabled ? 'ON' : 'OFF'} - Color code TAF text based on minima
-                </span>
-              </label>
-            </div>
-
-            {/* METAR Filter */}
-            <div className="flex items-center gap-3 mb-4">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={metarFilterEnabled}
-                  onChange={(e) => setMetarFilterEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  metarFilterEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    metarFilterEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {metarFilterEnabled ? 'ON' : 'OFF'} - Color code METAR text based on minima
-                </span>
-              </label>
-            </div>
-            
-            {/* Border Coloring Toggle */}
-            <div className="flex items-center gap-3">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={borderColoringEnabled}
-                  onChange={(e) => setBorderColoringEnabled(e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
-                  borderColoringEnabled ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform duration-200 ${
-                    borderColoringEnabled ? 'translate-x-6' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="ml-3 text-gray-300">
-                  {borderColoringEnabled ? 'ON' : 'OFF'} - Color code tile borders based on minima
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {/* Color Scheme Selection */}
-          <div className="bg-gray-900 rounded-lg p-4">
-            <h4 className="text-lg font-semibold text-cyan-300 mb-3">Color Schemes</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
-                <button
-                  key={key}
-                  onClick={() => setColorScheme(key)}
-                  className={`p-3 rounded-lg border-2 text-left transition-all duration-200 ${
-                    colorScheme === key 
-                      ? 'border-cyan-400 bg-gray-800' 
-                      : 'border-gray-600 bg-gray-800 hover:border-gray-500'
-                  }`}
-                >
-                  <div className="font-medium text-gray-200 mb-1">{preset.name}</div>
-                  <div className="flex gap-2 text-xs">
-                    <span className={`${preset.aboveMinima} bg-gray-700 px-2 py-1 rounded`}>
-                      Above Minima
-                    </span>
-                    <span className={`${preset.belowMinima} bg-gray-700 px-2 py-1 rounded font-bold`}>
-                      Below Minima
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Colors (only show if custom scheme is selected) */}
-          {colorScheme === 'custom' && (
-            <div className="bg-gray-900 rounded-lg p-4">
-              <h4 className="text-lg font-semibold text-cyan-300 mb-4">Custom Color Configuration</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ColorPicker
-                  label="Above Minima Color"
-                  value={customColors.aboveMinima}
-                  onChange={(color) => setCustomColors(prev => ({ ...prev, aboveMinima: color }))}
-                />
-                <ColorPicker
-                  label="Below Minima Color"
-                  value={customColors.belowMinima}
-                  onChange={(color) => setCustomColors(prev => ({ ...prev, belowMinima: color }))}
-                />
-                <ColorPicker
-                  label="METAR Text Color"
-                  value={customColors.metar}
-                  onChange={(color) => setCustomColors(prev => ({ ...prev, metar: color }))}
-                />
-                <ColorPicker
-                  label="TAF Text Color"
-                  value={customColors.taf}
-                  onChange={(color) => setCustomColors(prev => ({ ...prev, taf: color }))}
-                />
-              </div>
-              
-              {/* Preview */}
-              <div className="mt-4 p-3 bg-black rounded border border-gray-700">
-                <div className="text-sm text-gray-400 mb-2">Preview:</div>
-                <div className={`${customColors.metar} font-mono text-sm mb-1`}>
-                  METAR KJFK 012351Z 26008KT 10SM FEW250 10/M06 A3012
-                </div>
-                <div className={`${customColors.aboveMinima} font-mono text-sm mb-1`}>
-                  TAF Line Above Minima: 1000 OVC 6SM -SN
-                </div>
-                <div className={`${customColors.belowMinima} font-mono text-sm font-bold`}>
-                  TAF Line Below Minima: 200 OVC 1/2SM +SN
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer-fixed border-t border-gray-700 p-4 bg-gray-900 text-center rounded-b-xl">
-          <button
-            onClick={onClose}
-            className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2 rounded-lg transition-colors"
-          >
-            Apply Settings
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.getElementById('modal-root')
-  );
-};
 
 // Weather Tile Component with enhanced mobile support and keyword highlighting
 const WeatherTile = ({ 
@@ -547,7 +246,6 @@ const WeatherTile = ({
   onReorder,
   minimaFilterEnabled,
   colorScheme,
-  customColors,
   borderColoringEnabled,
   metarFilterEnabled,
   keywordCategories,
@@ -584,9 +282,6 @@ const WeatherTile = ({
 
   // Get current color scheme
   const getCurrentColors = () => {
-    if (colorScheme === 'custom') {
-      return customColors;
-    }
     return COLOR_PRESETS[colorScheme] || COLOR_PRESETS.classic;
   };
 
@@ -607,7 +302,7 @@ const WeatherTile = ({
           min.ceiling, 
           min.vis, 
           minimaFilterEnabled, 
-          colorScheme === 'custom' ? 'custom' : colorScheme,
+          colorScheme,
           keywordCategories,
           keywordHighlightEnabled
         );
@@ -620,7 +315,7 @@ const WeatherTile = ({
     fetchData();
     const intervalId = setInterval(fetchData, 300000);
     return () => clearInterval(intervalId);
-  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme, metarFilterEnabled, keywordCategories, keywordHighlightEnabled, customColors]);
+  }, [icao, min.ceiling, min.vis, minimaFilterEnabled, colorScheme, metarFilterEnabled, keywordCategories, keywordHighlightEnabled]);
 
   // Function to get METAR color class based on conditions
   const getMETARColorClass = () => {
@@ -645,13 +340,6 @@ const WeatherTile = ({
     }
     return metarRaw;
   };
-
-  // Update custom colors in COLOR_PRESETS when customColors change
-  useEffect(() => {
-    if (colorScheme === 'custom') {
-      COLOR_PRESETS.custom = { ...COLOR_PRESETS.custom, ...customColors };
-    }
-  }, [customColors, colorScheme]);
 
   useEffect(() => {
     try {
@@ -835,34 +523,7 @@ const WeatherTile = ({
         throw new Error(data.error);
       }
       
-      const parsedNotams = [];
-      
-      if (Array.isArray(data)) {
-        data.forEach(item => {
-          parsedNotams.push({
-            id: item.number || `${icao}-${Date.now()}`,
-            number: item.number || '',
-            icao: icao,
-            classification: item.classification || '',
-            type: item.type || '',
-            validFrom: item.validFrom || '',
-            validTo: item.validTo || '',
-            description: item.summary || item.body || 'No description available',
-            summary: item.summary || item.body || 'No summary available',
-            rawText: item.body || item.summary || '',
-            location: item.location || icao,
-            qLine: item.qLine || '',
-            source: 'Backend API (FAA Official)',
-            aLine: item.location || icao,
-            bLine: item.validFrom || '',
-            cLine: item.validTo || '',
-            isPermanent: item.validTo ? item.validTo.includes('PERM') : false,
-            body: item.body || item.summary || ''
-          });
-        });
-      }
-      
-      setNotamData(parsedNotams);
+      setNotamData(data);
       
     } catch (error) {
       console.error(`Error fetching NOTAMs for ${icao}:`, error);
@@ -881,9 +542,7 @@ const WeatherTile = ({
       e.preventDefault();
     }
     setNotamModalOpen(true);
-    setTimeout(() => {
-      fetchNotamData();
-    }, 0);
+    fetchNotamData();
   };
 
   const handleCloseNotamModal = () => {
@@ -993,65 +652,74 @@ const WeatherTile = ({
         onTouchEnd={handleTouchEnd}
         aria-live="polite"
       >
-        {/* Remove button */}
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            removeWeatherICAO(icao);
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          type="button" 
-          className="absolute top-2 right-2 z-20 bg-gradient-to-br from-gray-900 to-gray-800 border-none rounded-full w-8 h-8 flex items-center justify-center text-red-400 hover:bg-gradient-to-br hover:from-red-600 hover:to-red-700 hover:text-white hover:scale-110 transition-all duration-200 shadow-lg hover:shadow-red-500/25 backdrop-blur-sm"
-          title={`Remove ${icao}`}
-          aria-label={`Remove ${icao}`}
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 20 20" className="transition-transform duration-200 hover:rotate-90">
-            <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
-          </svg>
-        </button>
-
-        {/* Minimize toggle */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!globalMinimized) toggleMinimize();
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          type="button"
-          title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
-          aria-pressed={effectiveMinimized}
-          disabled={globalMinimized}
-          className={`absolute left-2 top-2 ${globalMinimized ? 'bg-gradient-to-br from-gray-600 to-gray-700' : 'bg-gradient-to-br from-gray-800 to-gray-900'} text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-gray-600 hover:scale-105 transition-all duration-200 backdrop-blur-sm`}
-          style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${effectiveMinimized ? 'rotate-180' : ''}`}>
-            <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
-        {/* Title with drag handle */}
-        <div className="flex items-center justify-center gap-2 relative">
-          <div className="absolute left-0 top-0 bottom-0 flex items-center cursor-grab active:cursor-grabbing" title="Drag to reorder">
-            <svg width="12" height="16" viewBox="0 0 12 16" className="text-gray-500 hover:text-cyan-400 transition-colors">
-              <circle cx="2" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="2" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="2" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="6" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="4" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="10" cy="12" r="1.5" fill="currentColor" />
-            </svg>
+        {/* Header Section */}
+        <div className="flex justify-between items-center mb-2">
+          {/* Minimize toggle and Drag Handle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!globalMinimized) toggleMinimize();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              type="button"
+              title={globalMinimized ? `Global minimize active` : (minimized ? `Expand ${icao} weather` : `Collapse ${icao} weather`)}
+              aria-pressed={effectiveMinimized}
+              disabled={globalMinimized}
+              className={`text-gray-200 rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-gray-600 hover:scale-105 transition-all duration-200 backdrop-blur-sm ${globalMinimized ? 'bg-gray-700' : 'bg-gray-800'}`}
+              style={{ zIndex: 12, opacity: globalMinimized ? 0.7 : 1, cursor: globalMinimized ? 'not-allowed' : 'pointer' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform duration-300 ${effectiveMinimized ? 'rotate-180' : ''}`}>
+                <path d="M18 9l-6 6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <div className="cursor-grab active:cursor-grabbing" title="Drag to reorder">
+              <svg width="12" height="16" viewBox="0 0 12 16" className="text-gray-500 hover:text-cyan-400 transition-colors">
+                <circle cx="2" cy="4" r="1.5" fill="currentColor" /><circle cx="2" cy="8" r="1.5" fill="currentColor" /><circle cx="2" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="6" cy="4" r="1.5" fill="currentColor" /><circle cx="6" cy="8" r="1.5" fill="currentColor" /><circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                <circle cx="10" cy="4" r="1.5" fill="currentColor" /><circle cx="10" cy="8" r="1.5" fill="currentColor" /><circle cx="10" cy="12" r="1.5" fill="currentColor" />
+              </svg>
+            </div>
           </div>
+          
+          {/* ICAO Title */}
           <div className="text-2xl font-bold text-center bg-gradient-to-br from-cyan-400 to-cyan-600 bg-clip-text text-transparent tracking-wider drop-shadow-sm">{icao}</div>
+          
+          {/* Header Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleNotamClick}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              className="bg-orange-600 hover:bg-orange-700 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-orange-400 hover:scale-110 transition-all duration-200"
+              title={`View NOTAMs for ${icao}`}
+            >
+              <span className="font-bold text-sm">N</span>
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                removeWeatherICAO(icao);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              type="button" 
+              className="bg-red-600 hover:bg-red-700 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg border-2 border-red-400 hover:scale-110 transition-all duration-200"
+              title={`Remove ${icao}`}
+              aria-label={`Remove ${icao}`}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 20 20" className="transition-transform duration-200 hover:rotate-90">
+                <path d="M5.5 14.5l9-9m-9 0l9 9" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
+
 
         {/* Minima controls */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-start sm:items-center mt-2 text-xs" onClick={(e) => e.stopPropagation()}>
-          <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300 flex items-center gap-1`}>
+          <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
             Ceil: 
             <input 
               type="number" 
@@ -1064,7 +732,7 @@ const WeatherTile = ({
               aria-label={`${icao} ceiling minima`}
             />
           </label>
-          <label className={`${usingDefault ? 'opacity-70 italic' : ''} text-gray-300 flex items-center gap-1`}>
+          <label className={`${usingDefault ? 'opacity-70' : ''} text-gray-300 flex items-center gap-1`}>
             Vis: 
             <input 
               type="number" 
@@ -1078,8 +746,7 @@ const WeatherTile = ({
               aria-label={`${icao} visibility minima`}
             />
           </label>
-          {usingDefault ? 
-            <span className="opacity-70 italic text-gray-400 text-xs">(default)</span> : 
+          {!usingDefault && (
             <button 
               className="text-yellow-400 underline text-xs hover:text-yellow-200 whitespace-nowrap" 
               onClick={(e) => {
@@ -1092,32 +759,14 @@ const WeatherTile = ({
             >
               reset
             </button>
-          }
-        </div>
-
-        {/* NOTAM Button */}
-        <div className="mt-2 flex justify-end" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNotamClick(e);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            className="bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border border-gray-600 hover:border-gray-500 shadow-sm hover:shadow-md hover:scale-105 backdrop-blur-sm"
-            title={`View NOTAMs for ${icao}`}
-          >
-            <span className="flex items-center gap-1">
-              📋 NOTAMs
-            </span>
-          </button>
+          )}
         </div>
 
         {/* Weather content */}
         {effectiveMinimized ? (
           <div className="mt-2 text-sm text-gray-300 flex items-center justify-center">
             <span className="px-2 py-1 bg-gray-900 rounded text-xs">
-              Weather minimized — {globalMinimized ? 'global' : 'local'} view
+              Weather minimized
             </span>
           </div>
         ) : (
@@ -1236,24 +885,6 @@ const WeatherMonitorApp = () => {
     }
   });
 
-  const [customColors, setCustomColors] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("customColors") || JSON.stringify({
-        aboveMinima: 'text-green-400',
-        belowMinima: 'text-red-400',
-        metar: 'text-green-400',
-        taf: 'text-green-400'
-      }));
-    } catch (e) {
-      return {
-        aboveMinima: 'text-green-400',
-        belowMinima: 'text-red-400',
-        metar: 'text-green-400',
-        taf: 'text-green-400'
-      };
-    }
-  });
-
   // Keyword highlighting state
   const [keywordHighlightEnabled, setKeywordHighlightEnabled] = useState(() => {
     try {
@@ -1272,7 +903,6 @@ const WeatherMonitorApp = () => {
     }
   });
 
-  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [keywordHighlightModalOpen, setKeywordHighlightModalOpen] = useState(false);
 
   // ICAO Filter state
@@ -1328,12 +958,6 @@ const WeatherMonitorApp = () => {
       localStorage.setItem("colorScheme", colorScheme);
     } catch (e) {}
   }, [colorScheme]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("customColors", JSON.stringify(customColors));
-    } catch (e) {}
-  }, [customColors]);
 
   useEffect(() => {
     try {
@@ -1498,65 +1122,63 @@ const WeatherMonitorApp = () => {
     return false;
   };
 
+  const handleCycleColorScheme = () => {
+    const schemes = Object.keys(COLOR_PRESETS);
+    const currentIndex = schemes.indexOf(colorScheme);
+    const nextIndex = (currentIndex + 1) % schemes.length;
+    setColorScheme(schemes[nextIndex]);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200">
       <Header />
       
       {/* Global Weather Minima Controls */}
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 mb-4">
-        <div className="flex flex-wrap gap-2 sm:gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
-          <span className="font-bold text-cyan-300 text-sm sm:text-base">Weather Minima:</span>
-          <label className="text-gray-300 text-sm flex flex-col sm:flex-row items-center gap-1">
-            Ceil (ft):
-            <input 
-              type="number" 
-              className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
-              value={globalWeatherCeiling}
-              onChange={(e) => setGlobalWeatherCeiling(e.target.value)}
-            />
-          </label>
-          <label className="text-gray-300 text-sm flex flex-col sm:flex-row items-center gap-1">
-            Vis (SM):
-            <input 
-              type="number" 
-              step="0.1" 
-              className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
-              value={globalWeatherVis}
-              onChange={(e) => setGlobalWeatherVis(e.target.value)}
-            />
-          </label>
-          <button 
-            onClick={handleApplyGlobalWeatherMinima} 
-            className="bg-green-600 px-4 py-2 rounded text-white hover:bg-green-700 transition-colors text-sm"
-          >
-            Set Default
-          </button>
+        <div className="flex flex-col md:flex-row flex-wrap gap-4 justify-center items-center mb-2 bg-gray-800 rounded-lg p-4">
+          <div className="flex flex-wrap gap-4 items-center justify-center">
+            <span className="font-bold text-cyan-300 text-sm sm:text-base">Default Minima:</span>
+            <label className="text-gray-300 text-sm flex items-center gap-2">
+              Ceil (ft):
+              <input 
+                type="number" 
+                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
+                value={globalWeatherCeiling}
+                onChange={(e) => setGlobalWeatherCeiling(e.target.value)}
+              />
+            </label>
+            <label className="text-gray-300 text-sm flex items-center gap-2">
+              Vis (SM):
+              <input 
+                type="number" 
+                step="0.1" 
+                className="bg-gray-700 p-2 rounded w-20 text-center text-white text-sm"
+                value={globalWeatherVis}
+                onChange={(e) => setGlobalWeatherVis(e.target.value)}
+              />
+            </label>
+            <button 
+              onClick={handleApplyGlobalWeatherMinima} 
+              className="bg-green-600 px-4 py-2 rounded text-white hover:bg-green-700 transition-colors text-sm"
+            >
+              Apply Default
+            </button>
+          </div>
           
-          {/* Settings Button */}
-          <button
-            onClick={() => setSettingsPanelOpen(true)}
-            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2 text-sm"
-            title="Display Settings"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"></path>
-            </svg>
-            <span className="hidden sm:inline">Settings</span>
-          </button>
-
-          {/* Keywords Button */}
-          <button
-            onClick={() => setKeywordHighlightModalOpen(true)}
-            className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2 text-sm"
-            title="Keyword Highlighting"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="M21 21l-4.35-4.35"></path>
-            </svg>
-            <span className="hidden sm:inline">Keywords</span>
-          </button>
+          <div className="flex flex-wrap gap-2 sm:gap-4 items-center justify-center">
+            {/* Keywords Button */}
+            <button
+              onClick={() => setKeywordHighlightModalOpen(true)}
+              className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white transition-colors flex items-center gap-2 text-sm"
+              title="Keyword Highlighting"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="M21 21l-4.35-4.35"></path>
+              </svg>
+              <span className="hidden sm:inline">Keywords</span>
+            </button>
+          </div>
         </div>
 
         {/* Interactive status indicators */}
@@ -1609,12 +1231,16 @@ const WeatherMonitorApp = () => {
               {borderColoringEnabled ? 'ON' : 'OFF'}
             </span>
           </button>
-          <div className="flex items-center gap-1.5 p-1">
+          <button 
+            onClick={handleCycleColorScheme}
+            className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-700 transition-colors"
+            title="Cycle color schemes"
+          >
             <span className="text-gray-400 font-medium pl-2">Colors:</span>
             <span className="px-2.5 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs">
               {COLOR_PRESETS[colorScheme]?.name || 'Custom'}
             </span>
-          </div>
+          </button>
         </div>
       </div>
       
@@ -1640,7 +1266,7 @@ const WeatherMonitorApp = () => {
               className={`px-4 py-2 rounded text-white transition-colors text-sm ${globalWeatherMinimized ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-600 hover:bg-gray-500'}`}
               title={globalWeatherMinimized ? 'Expand all weather tiles' : 'Minimize all weather tiles'}
             >
-              {globalWeatherMinimized ? 'Expand All' : 'Minimize Weather'}
+              {globalWeatherMinimized ? 'Expand All' : 'Minimize All'}
             </button>
           </div>
         </div>
@@ -1686,7 +1312,7 @@ const WeatherMonitorApp = () => {
       {/* Weather Tiles Grid */}
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-          {filteredICAOs.map((icao, index) => (
+          {filteredICAOs.map((icao) => (
             <div key={`${icao}-container`} className="relative transition-all duration-300 ease-out">
               {shouldShowInsertionSpace(icao, 'before') && (
                 <div className="absolute -left-4 top-0 bottom-0 w-2 bg-gradient-to-b from-cyan-400 via-cyan-500 to-cyan-400 rounded-full shadow-lg shadow-cyan-400/50 animate-[pulse_1s_ease-in-out_infinite] before:content-[''] before:absolute before:inset-0 before:bg-cyan-400 before:rounded-full before:animate-ping before:opacity-30" />
@@ -1710,7 +1336,6 @@ const WeatherMonitorApp = () => {
                 draggedItem={draggedItem}
                 minimaFilterEnabled={minimaFilterEnabled}
                 colorScheme={colorScheme}
-                customColors={customColors}
                 borderColoringEnabled={borderColoringEnabled}
                 metarFilterEnabled={metarFilterEnabled}
                 keywordCategories={keywordCategories}
@@ -1755,27 +1380,11 @@ const WeatherMonitorApp = () => {
               Add ICAO codes above to start monitoring weather conditions
             </p>
             <p className="text-gray-400 mt-2 text-sm">
-              Use the Settings and Keywords buttons to configure color coding and highlighting
+              Use the status pills and Keywords button to configure your view
             </p>
           </div>
         )}
       </div>
-
-      {/* Settings Panel */}
-      <SettingsPanel
-        isOpen={settingsPanelOpen}
-        onClose={() => setSettingsPanelOpen(false)}
-        minimaFilterEnabled={minimaFilterEnabled}
-        setMinimaFilterEnabled={setMinimaFilterEnabled}
-        colorScheme={colorScheme}
-        setColorScheme={setColorScheme}
-        customColors={customColors}
-        setCustomColors={setCustomColors}
-        borderColoringEnabled={borderColoringEnabled}
-        setBorderColoringEnabled={setBorderColoringEnabled}
-        metarFilterEnabled={metarFilterEnabled}
-        setMetarFilterEnabled={setMetarFilterEnabled}
-      />
 
       {/* Keyword Highlight Manager Modal */}
       <KeywordHighlightManager
