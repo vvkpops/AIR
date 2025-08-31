@@ -1,6 +1,5 @@
 // Complete App.js with draggable weather cards, keyword highlighting, and mobile optimization
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import './index.css';
 import KeywordHighlightManager, { highlightKeywords } from './KeywordHighlight';
 import NotamModal from './NotamModal';
