@@ -462,3 +462,394 @@ code {
   background-color: rgba(6, 182, 212, 0.1) !important;
   border-color: rgba(6, 182, 212, 0.3) !important;
 }
+/* Additional CSS to add to your src/index.css file */
+
+/* Keyword highlighting styles */
+.keyword-highlight {
+  display: inline;
+  border-radius: 3px;
+  font-weight: 700;
+  text-shadow: none;
+  white-space: nowrap;
+  margin: 0 1px;
+  padding: 1px 3px;
+}
+
+/* Ensure keyword highlights work well with existing text colors */
+.keyword-highlight.bg-red-500 {
+  background-color: rgb(239 68 68) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-orange-500 {
+  background-color: rgb(249 115 22) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-yellow-500 {
+  background-color: rgb(234 179 8) !important;
+  color: black !important;
+}
+
+.keyword-highlight.bg-green-500 {
+  background-color: rgb(34 197 94) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-blue-500 {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-purple-500 {
+  background-color: rgb(168 85 247) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-pink-500 {
+  background-color: rgb(236 72 153) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-cyan-500 {
+  background-color: rgb(6 182 212) !important;
+  color: black !important;
+}
+
+.keyword-highlight.bg-gray-500 {
+  background-color: rgb(107 114 128) !important;
+  color: white !important;
+}
+
+.keyword-highlight.bg-indigo-500 {
+  background-color: rgb(99 102 241) !important;
+  color: white !important;
+}
+
+/* Enhanced mobile responsiveness */
+@media (max-width: 640px) {
+  /* Make tiles stack better on mobile */
+  .grid-cols-1 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  /* Better mobile modal sizing */
+  .modal-content-fixed {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 0 !important;
+  }
+  
+  .modal-overlay {
+    padding: 8px !important;
+  }
+  
+  /* Adjust font sizes for mobile */
+  .text-2xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+  
+  .text-3xl {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+  
+  /* Better mobile button spacing */
+  .flex-wrap {
+    gap: 0.5rem;
+  }
+  
+  /* Improve mobile touch targets */
+  button, input, select, textarea {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-friendly drag indicators */
+  .cursor-grab,
+  .cursor-grabbing {
+    cursor: pointer;
+  }
+  
+  /* Better mobile scrolling */
+  .modal-body-scrollable {
+    max-height: calc(90vh - 140px) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Improved touch handling */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch device optimizations */
+  .hover\:scale-\[1\.02\]:hover {
+    transform: none;
+  }
+  
+  .hover\:shadow-xl:hover {
+    box-shadow: none;
+  }
+  
+  /* Better touch feedback */
+  button:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  
+  /* Larger touch targets */
+  .absolute.top-2.right-2,
+  .absolute.left-2.top-2 {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Improved animations for mobile */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-pulse,
+  .animate-bounce,
+  .animate-wiggle,
+  .animate-drag-float {
+    animation: none;
+  }
+  
+  .transition-all,
+  .transition-colors,
+  .transition-transform {
+    transition: none;
+  }
+}
+
+/* Better contrast for accessibility */
+@media (prefers-contrast: high) {
+  .keyword-highlight {
+    border: 2px solid currentColor;
+    font-weight: 900;
+  }
+  
+  .bg-gray-800,
+  .bg-gray-900 {
+    background-color: rgb(0 0 0) !important;
+    border-color: rgb(255 255 255) !important;
+  }
+  
+  .text-gray-300,
+  .text-gray-400 {
+    color: rgb(255 255 255) !important;
+  }
+}
+
+/* Responsive grid improvements */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) and (max-width: 1536px) {
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-3.xl\:grid-cols-4.\32xl\:grid-cols-5 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Enhanced keyword highlight hover effects */
+.keyword-highlight:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  position: relative;
+}
+
+/* Better focus indicators for accessibility */
+.focus-ring:focus-visible {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.2);
+}
+
+/* Smooth transitions for keyword highlights */
+.keyword-highlight {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile-optimized input styling */
+@media (max-width: 640px) {
+  input[type="number"],
+  input[type="text"],
+  textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+/* Improved drag feedback for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .animate-wiggle {
+    animation: wiggle 0.3s ease-in-out 2;
+  }
+  
+  /* Enhanced touch feedback for draggable items */
+  [data-icao] {
+    -webkit-tap-highlight-color: rgba(6, 182, 212, 0.2);
+  }
+}
+
+/* Loading state improvements */
+.animate-spin {
+  animation-duration: 1s;
+}
+
+/* Better modal stacking on mobile */
+@media (max-width: 640px) {
+  .modal-overlay {
+    z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  .modal-content-fixed {
+    position: relative;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+/* Improved visibility for drag indicators */
+.cursor-grab svg,
+.cursor-grabbing svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Better contrast for keyword tooltips */
+.keyword-highlight[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 20;
+  margin-bottom: 4px;
+}
+
+/* Responsive text scaling */
+@media (max-width: 480px) {
+  .text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  
+  .text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  
+  /* Smaller padding on very small screens */
+  .p-4 {
+    padding: 0.75rem;
+  }
+  
+  .p-6 {
+    padding: 1rem;
+  }
+}
+
+/* Performance optimizations */
+.bg-gradient-to-br,
+.bg-gradient-to-r {
+  will-change: transform;
+}
+
+/* Drag performance optimization */
+[data-icao] {
+  contain: layout style;
+}
+
+/* Smooth scrolling for modals */
+.modal-body-scrollable {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Better status indicator visibility */
+.bg-green-600,
+.bg-yellow-600,
+.bg-red-600 {
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Enhanced border coloring with gradients */
+.border-red-500 {
+  border-image: linear-gradient(45deg, rgb(239 68 68), rgb(220 38 38)) 1;
+}
+
+.border-green-500 {
+  border-image: linear-gradient(45deg, rgb(34 197 94), rgb(21 128 61)) 1;
+}
+
+.border-orange-500 {
+  border-image: linear-gradient(45deg, rgb(249 115 22), rgb(234 88 12)) 1;
+}
+
+.border-cyan-500 {
+  border-image: linear-gradient(45deg, rgb(6 182 212), rgb(14 116 144)) 1;
+}
+
+/* Grid gap improvements for different screen sizes */
+@media (max-width: 640px) {
+  .gap-4.sm\:gap-6 {
+    gap: 0.75rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .gap-4.sm\:gap-6 {
+    gap: 1rem;
+  }
+}
+
+/* Better visual hierarchy for weather data */
+.font-mono {
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Enhanced loading states */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, 
+    rgba(55, 65, 81, 1) 0%, 
+    rgba(75, 85, 99, 1) 50%, 
+    rgba(55, 65, 81, 1) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
