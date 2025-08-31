@@ -3,79 +3,28 @@ import ReactDOM from 'react-dom';
 
 const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   const modalRef = useRef(null);
-  const scrollPositionRef = useRef(0);
-  const bodyStylesRef = useRef({});
 
-  // Enhanced page position preservation
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         onClose();
       }
     };
+    
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
 
     if (isOpen) {
-      // Store current scroll position and body styles
-      scrollPositionRef.current = window.scrollY;
-      bodyStylesRef.current = {
-        position: document.body.style.position,
-        top: document.body.style.top,
-        width: document.body.style.width,
-        overflow: document.body.style.overflow,
-        overflowY: document.body.style.overflowY,
-        paddingRight: document.body.style.paddingRight
-      };
-      
-      // Calculate scrollbar width to prevent layout shift
-      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-      
-      // Add event listener
       document.addEventListener('mousedown', handleClickOutside);
-      
-      // Prevent body scroll and maintain position
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollPositionRef.current}px`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = `${scrollbarWidth}px`; // Compensate for scrollbar
-      
-      // Prevent scrolling on the html element as well
-      document.documentElement.style.overflow = 'hidden';
-      
-    } else {
-      // Restore all body styles
-      Object.keys(bodyStylesRef.current).forEach(key => {
-        document.body.style[key] = bodyStylesRef.current[key];
-      });
-      
-      // Restore html overflow
-      document.documentElement.style.overflow = '';
-      
-      // Restore scroll position with smooth scrolling disabled temporarily
-      const originalScrollBehavior = document.documentElement.style.scrollBehavior;
-      document.documentElement.style.scrollBehavior = 'auto';
-      window.scrollTo(0, scrollPositionRef.current);
-      document.documentElement.style.scrollBehavior = originalScrollBehavior;
+      document.addEventListener('keydown', handleEscape);
+      document.body.classList.add('modal-open');
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-    }
-
-    return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
 
@@ -136,7 +85,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
   };
 
   // Copy to clipboard function
-  const copyToClipboard = async (event, text, notamNumber = '') => {
+  const copyToClipboard = async (event, text) => {
     try {
       await navigator.clipboard.writeText(text);
       // Show a brief success indicator
@@ -149,20 +98,7 @@ const NotamModal = ({ icao, isOpen, onClose, notamData, loading, error }) => {
         button.classList.remove('bg-green-600');
       }, 2000);
     } catch (err) {
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      textArea.style.position = 'fixed';
-      textArea.style.opacity = '0';
-      document.body.appendChild(textArea);
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        console.log('Text copied using fallback method');
-      } catch (fallbackErr) {
-        console.error('Failed to copy text:', fallbackErr);
-      }
-      document.body.removeChild(textArea);
+      console.error('Failed to copy text:', err);
     }
   };
 
@@ -361,7 +297,7 @@ ${allNotamsText}`;
                           )}
                           {/* Individual Copy Button */}
                           <button
-                            onClick={(e) => copyToClipboard(e, displayText || 'No text available', notam.number)}
+                            onClick={(e) => copyToClipboard(e, displayText || 'No text available')}
                             className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
                             title="Copy this NOTAM to clipboard"
                           >
@@ -465,7 +401,7 @@ ${allNotamsText}`;
                               {notam.body}
                             </div>
                             <button
-                              onClick={(e) => copyToClipboard(e, notam.body, notam.number)}
+                              onClick={(e) => copyToClipboard(e, notam.body)}
                               className="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors"
                               title="Copy raw text"
                             >
